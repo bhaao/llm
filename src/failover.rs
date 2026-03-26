@@ -12,6 +12,9 @@
 //! 3. **备用提供商选举**：按优先级/信誉/负载选择下一个
 //! 4. **上下文不丢失**：切换前将上下文存入记忆层
 //! 5. **防抖动机制**：冷却时间 + 最大切换次数限制
+//! 6. **断路器模式**：连续失败自动打开断路器，指数退避重试
+
+pub mod circuit_breaker;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};

@@ -5,6 +5,11 @@
 //! - 从 JSON 文件加载并恢复区块链状态
 //! - 支持自动备份和增量更新
 //!
+//! **v0.6.0 更新**：
+//! - ✅ 全异步 IO 操作（使用 `tokio::fs`）
+//! - ✅ 非阻塞文件读写
+//! - ✅ 异步原子文件替换
+//!
 //! **使用示例**：
 //!
 //! ```ignore
@@ -14,18 +19,19 @@
 //! // 创建区块链
 //! let mut blockchain = Blockchain::new("user_123".to_string());
 //!
-//! // 保存到文件
+//! // 保存到文件（异步）
 //! let storage = JsonStorage::new("blockchain.json");
-//! storage.save(&blockchain).unwrap();
+//! storage.save(&blockchain).await.unwrap();
 //!
-//! // 从文件加载
-//! let loaded_blockchain = storage.load("user_123".to_string()).unwrap();
+//! // 从文件加载（异步）
+//! let loaded_blockchain = storage.load("user_123".to_string()).await.unwrap();
 //! ```
 
 use serde::{Serialize, Deserialize};
-use std::fs;
-use std::io::{BufReader, BufWriter};
+use tokio::fs;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
+use anyhow::{Result, Context};
 use crate::block::Block;
 use crate::blockchain::Blockchain;
 use crate::reputation::ReputationManager;
@@ -122,66 +128,84 @@ impl JsonStorage {
         &self.file_path
     }
 
-    /// 保存区块链到 JSON 文件
-    pub fn save(&self, blockchain: &Blockchain) -> Result<(), String> {
+    /// 保存区块链到 JSON 文件（异步）
+    pub async fn save(&self, blockchain: &Blockchain) -> Result<()> {
         let data = BlockchainData::from_blockchain(blockchain);
-        
+
         // 创建父目录（如果不存在）
         if let Some(parent) = self.file_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
+            fs::create_dir_all(parent).await
+                .with_context(|| format!("Failed to create directory '{}'", parent.display()))?;
         }
 
-        // 写入临时文件
+        // 写入临时文件（异步）
         let temp_path = self.file_path.with_extension("json.tmp");
-        let file = fs::File::create(&temp_path)
-            .map_err(|e| format!("Failed to create file: {}", e))?;
-        
-        let writer = BufWriter::new(file);
-        serde_json::to_writer_pretty(writer, &data)
-            .map_err(|e| format!("Failed to serialize: {}", e))?;
+        let file = fs::File::create(&temp_path).await
+            .with_context(|| format!("Failed to create file '{}'", temp_path.display()))?;
 
-        // 原子替换原文件
-        fs::rename(&temp_path, &self.file_path)
-            .map_err(|e| format!("Failed to rename file: {}", e))?;
+        let mut writer = BufWriter::new(file);
+        
+        // 序列化为 JSON 字符串（同步操作，但数据量小，影响可忽略）
+        let json_data = serde_json::to_string_pretty(&data)
+            .context("Failed to serialize blockchain data")?;
+        
+        // 异步写入
+        writer.write_all(json_data.as_bytes()).await
+            .context("Failed to write blockchain data")?;
+        writer.flush().await
+            .context("Failed to flush writer")?;
+        drop(writer);
+
+        // 原子替换原文件（异步）
+        fs::rename(&temp_path, &self.file_path).await
+            .with_context(|| format!("Failed to rename file to '{}'", self.file_path.display()))?;
 
         Ok(())
     }
 
-    /// 从 JSON 文件加载区块链
-    pub fn load(&self, _owner_address: String) -> Result<Blockchain, String> {
+    /// 从 JSON 文件加载区块链（异步）
+    pub async fn load(&self, _owner_address: String) -> Result<Blockchain> {
         if !self.file_path.exists() {
-            return Err(format!("File not found: {}", self.file_path.display()));
+            return Err(anyhow::anyhow!("File not found: {}", self.file_path.display()));
         }
 
-        let file = fs::File::open(&self.file_path)
-            .map_err(|e| format!("Failed to open file: {}", e))?;
-        
+        let file = fs::File::open(&self.file_path).await
+            .with_context(|| format!("Failed to open file '{}'", self.file_path.display()))?;
+
         let reader = BufReader::new(file);
-        let data: BlockchainData = serde_json::from_reader(reader)
-            .map_err(|e| format!("Failed to deserialize: {}", e))?;
+        
+        // 异步读取全部内容为字符串
+        let mut json_str = String::new();
+        let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await? {
+            json_str.push_str(&line);
+            json_str.push('\n');
+        }
+        
+        let data: BlockchainData = serde_json::from_str(&json_str)
+            .context("Failed to deserialize blockchain data")?;
 
         Ok(data.into_blockchain())
     }
 
-    /// 检查文件是否存在
+    /// 检查文件是否存在（同步，仅文件系统元数据查询）
     pub fn exists(&self) -> bool {
         self.file_path.exists()
     }
 
-    /// 删除存储文件
-    pub fn delete(&self) -> Result<(), String> {
+    /// 删除存储文件（异步）
+    pub async fn delete(&self) -> Result<()> {
         if self.exists() {
-            fs::remove_file(&self.file_path)
-                .map_err(|e| format!("Failed to delete file: {}", e))?;
+            fs::remove_file(&self.file_path).await
+                .with_context(|| format!("Failed to delete file '{}'", self.file_path.display()))?;
         }
         Ok(())
     }
 
-    /// 创建备份
-    pub fn backup(&self, backup_path: Option<&Path>) -> Result<PathBuf, String> {
+    /// 创建备份（异步）
+    pub async fn backup(&self, backup_path: Option<&Path>) -> Result<PathBuf> {
         if !self.exists() {
-            return Err("No file to backup".to_string());
+            return Err(anyhow::anyhow!("No file to backup"));
         }
 
         let backup_path_buf = backup_path.map(|p| p.to_path_buf()).unwrap_or_else(|| {
@@ -192,20 +216,20 @@ impl JsonStorage {
             self.file_path.with_extension(format!("json.backup.{}", timestamp))
         });
 
-        fs::copy(&self.file_path, &backup_path_buf)
-            .map_err(|e| format!("Failed to create backup: {}", e))?;
+        fs::copy(&self.file_path, &backup_path_buf).await
+            .with_context(|| format!("Failed to create backup to '{}'", backup_path_buf.display()))?;
 
         Ok(backup_path_buf)
     }
 
-    /// 从备份恢复
-    pub fn restore_from_backup(&self, backup_path: &Path) -> Result<(), String> {
+    /// 从备份恢复（异步）
+    pub async fn restore_from_backup(&self, backup_path: &Path) -> Result<()> {
         if !backup_path.exists() {
-            return Err(format!("Backup file not found: {}", backup_path.display()));
+            return Err(anyhow::anyhow!("Backup file not found: {}", backup_path.display()));
         }
 
-        fs::copy(backup_path, &self.file_path)
-            .map_err(|e| format!("Failed to restore from backup: {}", e))?;
+        fs::copy(backup_path, &self.file_path).await
+            .with_context(|| format!("Failed to restore from backup '{}'", backup_path.display()))?;
 
         Ok(())
     }
@@ -246,10 +270,10 @@ mod tests {
 
     fn create_test_blockchain() -> Blockchain {
         let mut blockchain = Blockchain::new("test_user".to_string());
-        
+
         // 添加一些测试数据
         blockchain.register_node("node_1".to_string());
-        
+
         let tx = Transaction::new_internal(
             "user".to_string(),
             "assistant".to_string(),
@@ -264,64 +288,64 @@ mod tests {
         blockchain
     }
 
-    #[test]
-    fn test_json_storage_save_and_load() {
+    #[tokio::test]
+    async fn test_json_storage_save_and_load() {
         let temp_path = std::env::temp_dir().join("test_blockchain.json");
         let storage = JsonStorage::new(&temp_path);
 
-        // 创建并保存区块链
+        // 创建并保存区块链（异步）
         let original = create_test_blockchain();
-        storage.save(&original).unwrap();
+        storage.save(&original).await.unwrap();
 
         // 验证文件存在
         assert!(storage.exists());
 
-        // 加载区块链
-        let loaded = storage.load("test_user".to_string()).unwrap();
+        // 加载区块链（异步）
+        let loaded = storage.load("test_user".to_string()).await.unwrap();
 
         // 验证数据一致性
         assert_eq!(original.height(), loaded.height());
         assert_eq!(original.node_count(), loaded.node_count());
         assert!(loaded.verify_chain());
 
-        // 清理
-        storage.delete().unwrap();
+        // 清理（异步）
+        storage.delete().await.unwrap();
     }
 
-    #[test]
-    fn test_json_storage_backup() {
+    #[tokio::test]
+    async fn test_json_storage_backup() {
         let temp_path = std::env::temp_dir().join("test_blockchain_backup.json");
         let storage = JsonStorage::new(&temp_path);
 
-        // 创建并保存区块链
+        // 创建并保存区块链（异步）
         let _original = create_test_blockchain();
-        storage.save(&_original).unwrap();
+        storage.save(&_original).await.unwrap();
 
-        // 创建备份
-        let backup_path = storage.backup(None).unwrap();
+        // 创建备份（异步）
+        let backup_path = storage.backup(None).await.unwrap();
         assert!(backup_path.exists());
 
-        // 删除原文件
-        storage.delete().unwrap();
+        // 删除原文件（异步）
+        storage.delete().await.unwrap();
         assert!(!storage.exists());
 
-        // 从备份恢复
-        storage.restore_from_backup(&backup_path).unwrap();
+        // 从备份恢复（异步）
+        storage.restore_from_backup(&backup_path).await.unwrap();
         assert!(storage.exists());
 
         // 清理
-        storage.delete().unwrap();
-        let _ = fs::remove_file(&backup_path);
+        storage.delete().await.unwrap();
+        let _ = fs::remove_file(&backup_path).await;
     }
 
-    #[test]
-    fn test_json_storage_not_found() {
+    #[tokio::test]
+    async fn test_json_storage_not_found() {
         let temp_path = std::env::temp_dir().join("non_existent.json");
         let storage = JsonStorage::new(&temp_path);
 
         assert!(!storage.exists());
-        
-        let result = storage.load("user".to_string());
+
+        let result = storage.load("user".to_string()).await;
         assert!(result.is_err());
     }
 }

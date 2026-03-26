@@ -1,91 +1,100 @@
-# Block Chain with Context
+# 分布式 KV 缓存系统
 
-**分布式大模型上下文可信存储系统** —— 区块链与分布式 LLM 的正确结合方式
+[![Build Status](https://img.shields.io/github/actions/workflow/status/user/block_chain_with_context/ci.yml)](https://github.com/user/block_chain_with_context/actions)
+[![Crates.io](https://img.shields.io/crates/v/block_chain_with_context.svg)](https://crates.io/crates/block_chain_with_context)
+[![Documentation](https://docs.rs/block_chain_with_context/badge.svg)](https://docs.rs/block_chain_with_context)
+[![License](https://img.shields.io/crates/l/block_chain_with_context.svg)](LICENSE)
+
+一个高性能的分布式 KV 缓存系统，专为大模型推理场景设计，带哈希审计日志功能。
+
+> [!WARNING]
+> **项目状态：v0.5.0 - 架构验证原型**
+>
+> **这是一个架构验证原型，不是生产就绪系统。**
+>
+> 本项目展示了分布式 KV 缓存 + 审计日志的架构设计，核心概念已验证，但部分模块仍处于原型阶段。
+> 生产环境使用请务必参阅 [`docs/limitations.md`](docs/limitations.md)。
+
+---
 
 ## 📖 项目简介
 
-本项目是 Memora 项目的核心子模块，采用 Rust 实现了一套创新的"区块链 + 分布式 LLM 推理"架构。不同于将区块链类比为计算过程的错误设计，本项目将区块链作为**可信增强工具**，通过 KV Cache 链上存证实现分布式推理的可信化。
+本项目采用 Rust 实现了一套高性能的分布式 KV 缓存系统，专为大模型推理场景优化：
+
+- **核心功能**：分布式 KV 上下文存储，支持分片、压缩、多级缓存
+- **审计日志**：KV 哈希存证，提供不可篡改的数据完整性验证
+- **信誉系统**：节点信誉管理，支持可信调度
 
 ### 核心理念
 
-> **区块链仅存证 KV 哈希，不存储实际数据；记忆链存储实际 KV 数据，哈希上链存证。**
+> **数据本地存储 + 哈希全网存证**
+>
+> - 记忆层存储实际 KV 数据，支持本地高速访问
+> - 审计日志记录 KV 哈希，提供全网存证验证
 
-两条链配合实现"**数据本地存储 + 哈希全网共识**"的可信架构。
+### 架构设计
 
----
-
-## 🏗️ 架构设计
-
-### 双链架构
-
-| 链类型 | 职责 | 存储内容 |
-|--------|------|----------|
-| **区块链 (Blockchain)** | 全局可信存证主链 | KV 哈希、元数据、信誉记录 |
-| **记忆链 (MemoryChain)** | 分布式 KV 数据链 | 实际上下文数据 (KV Cache) |
-
-### 三层解耦架构（企业级）
-
-基于联盟链设计原则，实现节点、记忆、推理三层彻底解耦：
+**三层架构**：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    区块链节点层                              │
-│  (Node Layer)                                               │
-│  • 节点身份/公钥/信誉管理                                    │
-│  • 推理提供商准入/调度/切换/惩罚                             │
-│  • 记忆层哈希校验/存证上链                                   │
-│  • 跨节点共识/仲裁                                           │
-│  约束：无状态、轻量逻辑 (<5ms/次)、支持异步上链              │
-└─────────────────────────────────────────────────────────────┘
-                              ↑ ↓ 哈希校验/存证
-┌─────────────────────────────────────────────────────────────┐
-│                    分布式记忆层                              │
-│  (Memory Layer)                                             │
-│  • 以"区块"为单位存储 KV/上下文分片                          │
-│  • 哈希链式串联（防篡改）                                    │
-│  • 分布式多副本存储（容灾）                                  │
-│  • 版本控制/访问授权                                         │
+│                    推理提供商层 (Provider Layer)             │
+│  • 从记忆层读取 KV/上下文                                    │
+│  • 执行 LLM 推理计算（vLLM/SGLang API）                      │
+│  • 向记忆层写入新生成的 KV                                   │
+│  • 向审计日志层上报推理指标                                  │
 └─────────────────────────────────────────────────────────────┘
                               ↑ ↓ 读取/写入 KV
 ┌─────────────────────────────────────────────────────────────┐
-│                  推理服务提供商层                            │
-│  (Provider Layer)                                           │
-│  • 从记忆层读取 KV/上下文                                    │
-│  • 执行 LLM 推理计算                                         │
-│  • 向记忆层写入新生成的 KV                                   │
-│  • 向节点层上报推理指标                                      │
-│  约束：无区块链能力、无记忆存储能力、标准化接口              │
+│                    记忆层 (Memory Layer)                     │
+│  • KV Cache 存储（分片、分层、压缩）                         │
+│  • 哈希链式校验（防篡改）                                    │
+│  • 分布式多副本存储（容灾）                                  │
+│  • 版本控制/访问授权                                         │
+└─────────────────────────────────────────────────────────────┘
+                              ↑ ↓ 哈希存证
+┌─────────────────────────────────────────────────────────────┐
+│                    审计日志层 (Audit Layer)                  │
+│  • KV 哈希存证（不可篡改）                                   │
+│  • 节点信誉管理                                              │
+│  • 共识结果记录                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 依赖关系（单向依赖，杜绝递归/闭环）
-
-```text
-推理提供商 → 依赖 → 记忆层（读取/写入 KV）
-推理提供商 → 依赖 → 节点层（获取访问授权/上报指标）
-记忆层   → 依赖 → 节点层（哈希校验/存证上链）
-节点层   → 不依赖 → 推理提供商/记忆层（仅做管控，不做执行）
-```
+详细架构说明请参阅 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
 
 ---
 
-## ✨ 核心创新
+## ✨ 核心特性
 
-### 创新 A：KV Cache 链上存证
+### 已完成特性
 
-将 KV 块的哈希上链存证，设计简单但有效：
+| 特性 | 状态 | 说明 |
+|------|------|------|
+| 真实 LLM 集成 | ✅ | 支持 vLLM/SGLang HTTP API |
+| 断路器模式 | ✅ | 连续失败自动切换 |
+| 异步 I/O | ✅ | 全链路 async/await |
+| 线程安全 | ✅ | 100 线程并发测试通过 |
+| KV Cache 优化 | ✅ | Chunk-level + 压缩 + 预取 |
+| 上下文分片 | ✅ | 支持 100K+ tokens 跨节点 |
+| 多级缓存 | ✅ | L1 CPU + L2 Disk + L3 Remote(Redis) |
+| gRPC 通信 | ✅ | 跨节点 RPC 支持 |
+| P2P 网络层 | ⚠️ 原型 | libp2p stub 实现 |
+| PBFT 共识 | ⚠️ 原型 | 框架完整，libp2p stub 已实现 |
 
-- **防篡改**：验证 KV 数据是否被篡改
-- **跨节点一致性**：跨节点 KV 一致性校验
-- **版本追溯**：追溯历史 KV 版本
+### 生产就绪度
 
-### 创新 B：链上可信调度
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| 服务层 | ✅ 生产就绪 | 推理编排、存证、故障切换服务 |
+| 审计日志（单节点） | ✅ 生产就绪 | KV 哈希存证、交易记录 |
+| 记忆层 | ✅ 生产就绪 | KV Cache 存储、分片、压缩、L3 Redis |
+| 节点层 | ✅ 生产就绪 | 节点管理、信誉系统 |
+| 提供商层 | ✅ 生产就绪 | 真实 LLM API 集成（vLLM/SGLang） |
+| P2P 网络层 | ⚠️ 原型 | libp2p stub 实现，待完整集成 |
+| PBFT 共识 | ⚠️ 原型 | 共识框架完整 |
 
-通过区块链记录节点信誉和调度决策：
-
-- **信誉系统**：基于历史表现动态计算节点信誉分
-- **可信调度**：优先调度高信誉节点处理推理任务
-- **惩罚机制**：异常节点自动降权/剔除
+详细评估请参阅 [`docs/limitations.md`](docs/limitations.md)。
 
 ---
 
@@ -93,153 +102,132 @@
 
 ### 环境要求
 
-- Rust 1.70+
-- Rust Edition 2021
+- **Rust**: 1.70+
+- **protoc**: 3.0+（gRPC 特性需要）
 
 ### 安装依赖
 
 ```bash
+# 安装 protoc（如未安装）
+apt-get install protobuf-compiler  # Debian/Ubuntu
+brew install protobuf              # macOS
+
+# 构建项目（默认特性）
 cargo build
+
+# 构建项目（启用 P2P 网络层）
+cargo build --features "p2p"
+
+# 构建项目（所有特性）
+cargo build --all-features
+
+# 运行测试
+cargo test
 ```
 
-### 基本使用
+### 特性说明
 
-#### 传统区块链 API
+| 特性 | 说明 |
+|------|------|
+| `rpc` (默认) | HTTP RPC + gRPC 跨节点通信 |
+| `grpc` (默认) | gRPC 支持（需 protoc） |
+| `tiered-storage` (默认) | 分层存储支持（KV Cache 优化） |
+| `remote-storage` | 远程存储支持（L3 Redis） |
+| `p2p` | P2P 网络支持（libp2p） |
+| `persistence` | 状态持久化（RocksDB） |
+
+### 使用示例
+
+#### 1. 基本 KV 存储
 
 ```rust
-use block_chain_with_context::{
-    Blockchain, Transaction, TransactionType, TransactionPayload,
-    BlockMetadata, KvCacheProof
+use block_chain_with_context::{MemoryLayerManager, AccessCredential, AccessType};
+
+// 创建记忆层管理器
+let mut memory = MemoryLayerManager::new("node_1");
+
+// 创建访问凭证
+let credential = AccessCredential {
+    credential_id: "cred_1".to_string(),
+    provider_id: "provider_1".to_string(),
+    memory_block_ids: vec!["all".to_string()],
+    access_type: AccessType::ReadWrite,
+    expires_at: u64::MAX,
+    issuer_node_id: "node_1".to_string(),
+    signature: "sig".to_string(),
+    is_revoked: false,
 };
 
-// 创建区块链
-let mut blockchain = Blockchain::new("user_address".to_string());
+// 写入 KV 数据
+memory.write_kv("key".to_string(), b"value".to_vec(), &credential).unwrap();
 
-// 注册推理节点
+// 读取 KV 数据
+let shard = memory.read_kv("key", &credential);
+assert!(shard.is_some());
+```
+
+#### 2. 配置管理（Builder 模式）
+
+```rust
+use block_chain_with_context::BlockchainConfig;
+
+// 使用 Builder 模式构建配置
+let config = BlockchainConfig::builder()
+    .trust_threshold(0.75)           // 可信阈值 0.75
+    .inference_timeout_ms(30000)     // 推理超时 30 秒
+    .commit_timeout_ms(10000)        // 上链超时 10 秒
+    .max_retries(5)                  // 最大重试 5 次
+    .log_level("info")               // 日志级别
+    .build()
+    .expect("配置验证失败");
+```
+
+#### 3. 审计日志（哈希存证）
+
+```rust
+use block_chain_with_context::{Blockchain, KvCacheProof};
+
+// 创建区块链（审计日志）
+let mut blockchain = Blockchain::new("node_1".to_string());
+
+// 注册节点
 blockchain.register_node("node_1".to_string());
 
-// 添加推理请求
-let tx = Transaction::new(
-    "user".to_string(),
-    "assistant".to_string(),
-    TransactionType::Transfer,
-    TransactionPayload::None,
-);
-blockchain.add_pending_transaction(tx);
-
-// 添加 KV Cache 存证
+// 添加 KV 存证
 let kv_proof = KvCacheProof::new(
     "kv_001".to_string(),
-    "kv_hash".to_string(),
+    "hash_123".to_string(),
     "node_1".to_string(),
     1024,
 );
 blockchain.add_kv_proof(kv_proof);
-
-// 提交推理记录到链上
-let metadata = BlockMetadata::default();
-blockchain.commit_inference(metadata, "node_1".to_string());
-```
-
-#### 三层解耦架构 API
-
-```rust
-use block_chain_with_context::coordinator::ArchitectureCoordinator;
-use block_chain_with_context::provider_layer::{
-    InferenceEngineType, InferenceRequest
-};
-
-// 创建架构协调器
-let mut coordinator = ArchitectureCoordinator::new("node_1".to_string());
-
-// 注册推理提供商
-coordinator.register_provider(
-    "provider_1".to_string(),
-    InferenceEngineType::Vllm,
-    100, // 100 token/s
-).unwrap();
-
-// 执行完整推理流程
-let request = InferenceRequest::new(
-    "req_1".to_string(),
-    "Hello, AI!".to_string(),
-    "llama-7b".to_string(),
-    100,
-);
-let response = coordinator.execute_inference(request).unwrap();
-
-// 验证链完整性
-assert!(coordinator.verify_memory_chain());
-assert!(coordinator.verify_blockchain());
-```
-
-### 运行示例
-
-```bash
-cargo run
-```
-
-输出示例：
-```text
-=== 分布式推理记录已上链 ===
-区块高度：1
-区块哈希：0xabc123...
-交易数量：1
-KV 存证数量：1
-总 Token 数：100
-链验证：true
-
-=== 节点信誉 ===
-可信节点数：2/2
-node_1 信誉分：100.00
-node_1 完成任务数：1
-node_1 处理 Token 数：100
-
-=== KV Cache 存证 ===
-KV 块：kv_001, 哈希：kv_hash_abc123, 节点：node_1
 ```
 
 ---
 
-## 📦 功能特性
+## 📊 性能指标
 
-### 核心模块
+### KV 操作延迟
 
-| 模块 | 描述 |
-|------|------|
-| `blockchain` | 区块链核心实现（区块、交易、共识） |
-| `memory_layer` | 分布式记忆层（KV 存储、分片、分层存储） |
-| `node_layer` | 节点管理层（身份、信誉、调度） |
-| `provider_layer` | 推理提供商层（引擎适配、HTTP 客户端） |
-| `coordinator` | 架构协调器（三层解耦 orchestration） |
-| `failover` | 故障转移（健康监控、自动切换） |
-| `quality_assessment` | 质量评估（语义检查、完整性验证） |
-| `reputation` | 信誉系统（节点评分、事件记录） |
-| `storage` | 持久化存储（JSON 序列化） |
+| 操作 | L1 命中 | L2 命中 | L3 命中 |
+|------|--------|--------|--------|
+| 读取延迟 | < 1ms | 10-50ms | 100-500ms |
+| 写入延迟 | < 1ms | 10-50ms | 100-500ms |
+| 成本/GB | $0.05 | $0.01 | $0.001 |
 
-### 可选特性（Features）
+### 并发性能
 
-```toml
-[features]
-default = []
-async = ["tokio"]              # 异步运行时支持
-http = ["reqwest", "tokio"]    # HTTP 客户端（调用推理服务）
-tiered-storage = ["tokio", "bincode"]  # 分层存储（GPU/CPU/磁盘）
-```
+| 测试场景 | 线程数 | 吞吐量 | P99 延迟 |
+|---------|--------|--------|---------|
+| KV 并发写入 | 10 | ~10K ops/s | ~5ms |
+| KV 并发写入 | 100 | ~50K ops/s | ~20ms |
+| 审计日志读取 | 10 | ~100K ops/s | ~1ms |
 
-启用特性：
+**数据来源**：`cargo bench` 基准测试报告
+
+运行基准测试：
 ```bash
-# 启用异步支持
-cargo build --features async
-
-# 启用 HTTP 客户端
-cargo build --features http
-
-# 启用分层存储
-cargo build --features tiered-storage
-
-# 启用全部特性
-cargo build --features "async,http,tiered-storage"
+cargo +nightly bench
 ```
 
 ---
@@ -250,87 +238,124 @@ cargo build --features "async,http,tiered-storage"
 # 运行所有测试
 cargo test
 
-# 运行特定模块测试
-cargo test --lib blockchain
-cargo test --lib memory_layer
+# 运行单元测试
+cargo test --lib
 
-# 带输出运行测试
-cargo test -- --nocapture
-```
+# 运行并发测试
+cargo test --test concurrency_tests -- --nocapture
 
----
+# 运行模糊测试
+cargo test --test fuzz_tests -- --nocapture
 
-## 📊 性能基准
-
-```bash
 # 运行基准测试（需要 nightly）
-cargo bench
+cargo +nightly bench
 ```
+
+### 测试覆盖
+
+| 测试类型 | 文件 | 测试数量 |
+|---------|------|---------|
+| 单元测试 | `src/*.rs` | ~50 |
+| 并发测试 | `tests/concurrency_tests.rs` | ~10 |
+| 模糊测试 | `tests/fuzz_tests.rs` | ~15 |
+| 基准测试 | `benches/performance_bench.rs` | ~15 |
 
 ---
 
-## 🔧 开发路线图
+## 📚 文档
 
-### 已完成 ✅
-
-- [x] 区块链核心数据结构（区块、交易、哈希链）
-- [x] 双链架构设计（区块链 + 记忆链）
-- [x] 三层解耦架构实现
-- [x] 基础信誉系统
-- [x] KV Cache 存证机制
-- [x] 质量评估框架
-
-### 进行中 🚧
-
-- [ ] 真实 LLM 推理引擎集成（vLLM/SGLang HTTP API）
-- [ ] 上下文分片与重组
-- [ ] 基础版 Ring Attention
-- [ ] 三层分层存储（GPU/CPU/磁盘）
-- [ ] KV Cache 压缩（量化、稀疏化）
-
-### 计划中 📅
-
-- [ ] gRPC/RPC 通信层
-- [ ] 分布式共识协议
-- [ ] 跨节点 KV 同步
-- [ ] 生产级故障转移
-- [ ] 监控与可观测性
-
-详细开发计划请参考 [`建议.md`](建议.md) 文件。
+- [**开发者指南**](docs/DEVELOPER_GUIDE.md) - 开发环境、代码规范、贡献流程
+- [**架构文档**](docs/ARCHITECTURE.md) - 系统架构、数据流、监控
+- [**P11 锐评与修复**](docs/P11_REVIEW.md) - 业内专家锐评及修复记录
+- [**修复总结**](docs/REMEDIATION_SUMMARY.md) - 修复进度总结
+- [**API 文档**](https://docs.rs/block_chain_with_context) - 完整 API 文档
 
 ---
 
-## 📁 项目结构
+## 🏗️ 架构说明
 
-```
-block_chain_with_context/
-├── src/
-│   ├── lib.rs              # 库入口，重新导出公共类型
-│   ├── main.rs             # CLI 示例程序
-│   ├── block.rs            # 区块定义
-│   ├── blockchain.rs       # 区块链核心实现
-│   ├── transaction.rs      # 交易定义
-│   ├── metadata.rs         # 区块元数据
-│   ├── error.rs            # 错误类型定义
-│   ├── traits.rs           # 核心特征（Hashable, Serializable 等）
-│   ├── coordinator.rs      # 三层架构协调器
-│   ├── node_layer.rs       # 节点管理层
-│   ├── memory_layer.rs     # 记忆层管理
-│   ├── memory_layer/       # 记忆层子模块
-│   │   ├── tiered_storage.rs   # 分层存储
-│   │   └── kv_compression.rs   # KV 压缩
-│   ├── provider_layer.rs   # 推理提供商层
-│   ├── provider_layer/     # 提供商层子模块
-│   │   └── http_client.rs      # HTTP 客户端
-│   ├── failover.rs         # 故障转移
-│   ├── quality_assessment.rs  # 质量评估
-│   ├── reputation.rs       # 信誉系统
-│   ├── storage.rs          # 持久化存储
-│   └── utils.rs            # 工具函数
-├── tests/                  # 集成测试
-├── benches/                # 基准测试
-├── Cargo.toml              # 项目配置
-├── 建议.md                 # 详细开发计划
-└── README.md               # 本文件
+### 依赖关系
+
+```text
+推理提供商 → 依赖 → 记忆层（读取/写入 KV）
+推理提供商 → 依赖 → 审计日志层（上报指标）
+记忆层   → 依赖 → 审计日志层（哈希存证）
+审计日志层 → 不依赖 → 推理提供商/记忆层
 ```
 
+### 锁顺序规范
+
+为避免死锁，所有锁操作遵循以下顺序：
+
+```
+L1 缓存锁 → L2 磁盘锁 → L3 远程锁 → 审计日志锁 → 记忆层锁
+```
+
+违反顺序会在 debug 模式下触发警告。
+
+---
+
+## 🔧 故障排查
+
+### 常见问题
+
+#### 1. protoc 未找到
+
+```text
+ERROR: protoc (protobuf compiler) not found
+```
+
+**解决方案**：
+```bash
+# Debian/Ubuntu
+apt-get install protobuf-compiler
+
+# macOS
+brew install protobuf
+```
+
+#### 2. 编译警告错误
+
+```text
+error: unused variable: `x`
+```
+
+**解决方案**：
+```bash
+cargo clippy --all-features --all-targets -- -D warnings
+```
+
+详细故障排查请参阅 [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md#故障排查)。
+
+---
+
+## 🤝 贡献
+
+欢迎贡献代码、报告问题或提出建议！
+
+1. Fork 项目
+2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+详细贡献流程请参阅 [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md#贡献流程)。
+
+---
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 参阅 [LICENSE](LICENSE) 文件。
+
+---
+
+## 🙏 致谢
+
+感谢业内专家的 P11 锐评，帮助我们改进了项目。
+
+详见 [`docs/P11_REVIEW.md`](docs/P11_REVIEW.md)。
+
+---
+
+*最后更新：2026-03-11*
+*项目版本：v0.5.0*

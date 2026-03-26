@@ -138,19 +138,6 @@ pub struct RetryConfig {
     pub delay_multiplier: f64,
 }
 
-/// 连接池配置
-#[derive(Debug, Clone)]
-pub struct ConnectionPoolConfig {
-    /// 最小连接数
-    pub min_connections: usize,
-    /// 最大连接数
-    pub max_connections: usize,
-    /// 连接超时（毫秒）
-    pub connection_timeout_ms: u64,
-    /// 连接空闲超时（毫秒）
-    pub idle_timeout_ms: u64,
-}
-
 /// 共识配置
 #[derive(Debug, Clone)]
 pub struct ConsensusConfig {
@@ -169,7 +156,6 @@ pub struct ConsensusConfig {
 /// - 超时配置：推理/上链/共识超时
 /// - 重试配置：失败重试策略
 /// - 日志配置：日志级别和输出
-/// - 连接池配置：数据库连接池参数
 /// - 共识配置：多数投票共识参数
 #[derive(Debug, Clone)]
 pub struct BlockchainConfig {
@@ -185,8 +171,6 @@ pub struct BlockchainConfig {
     pub retry: RetryConfig,
     /// 日志配置
     pub log: LogConfig,
-    /// 连接池配置
-    pub connection_pool: ConnectionPoolConfig,
     /// 共识配置
     pub consensus: ConsensusConfig,
 }
@@ -200,7 +184,6 @@ impl Default for BlockchainConfig {
             timeout: TimeoutConfig::default(),
             retry: RetryConfig::default(),
             log: LogConfig::default(),
-            connection_pool: ConnectionPoolConfig::default(),
             consensus: ConsensusConfig::default(),
         }
     }
@@ -240,17 +223,6 @@ impl Default for RetryConfig {
     }
 }
 
-impl Default for ConnectionPoolConfig {
-    fn default() -> Self {
-        ConnectionPoolConfig {
-            min_connections: 5,
-            max_connections: 20,
-            connection_timeout_ms: 5000,
-            idle_timeout_ms: 60000,
-        }
-    }
-}
-
 impl Default for ConsensusConfig {
     fn default() -> Self {
         ConsensusConfig {
@@ -271,7 +243,6 @@ impl BlockchainConfig {
             timeout: TimeoutConfig::default(),
             retry: RetryConfig::default(),
             log: LogConfig::default(),
-            connection_pool: ConnectionPoolConfig::default(),
             consensus: ConsensusConfig::default(),
         }
     }
@@ -384,23 +355,17 @@ pub struct Blockchain {
     pub(crate) simulate_commit_failure: bool,
 }
 
-// 实现 Clone 以便在线程间传递
-impl Clone for Blockchain {
-    fn clone(&self) -> Self {
-        Blockchain {
-            chain: self.chain.clone(),
-            pending_transactions: self.pending_transactions.clone(),
-            pending_kv_proofs: self.pending_kv_proofs.clone(),
-            reputation_manager: self.reputation_manager.clone(),
-            owner_address: self.owner_address.clone(),
-            config: self.config.clone(),
-            assessor: self.assessor.as_ref().map(|a| a.clone_box()),
-            consensus_engine: ConsensusEngine::new(self.consensus_engine.threshold, self.consensus_engine.min_nodes),
-            #[cfg(test)]
-            simulate_commit_failure: self.simulate_commit_failure,
-        }
-    }
-}
+// 注意：Blockchain 不实现 Clone
+// 线程间传递应使用 Arc<RwLock<Blockchain>>
+// 
+// 修复说明 (P11 锐评修复):
+// 之前的 Clone 实现会深度克隆所有字段，绕过了 Arc<RwLock<>> 的同步保护
+// 每次 clone() 都会创建独立实例，导致线程安全问题
+// 
+// 正确模式：
+// - 使用 Arc<RwLock<Blockchain>> 包装
+// - 通过 read()/write() 获取锁后访问
+// - 在线程间传递 Arc 克隆（轻量级，共享状态）
 
 /// 线程安全的区块链包装器
 pub type SafeBlockchain = Arc<RwLock<Blockchain>>;
@@ -908,7 +873,7 @@ impl Blockchain {
 
             current_block
                 .verify_with_error()
-                .map_err(|e| format!("Block {} invalid: {}", current_block.index, e))?;
+                .map_err(|e| anyhow::anyhow!("Block {} invalid: {}", current_block.index, e).to_string())?;
         }
 
         Ok(())

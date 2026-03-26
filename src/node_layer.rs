@@ -23,6 +23,9 @@
 //! 推理提供商 → 依赖 → 节点层（获取访问授权/上报指标）
 //! ```
 
+#[cfg(feature = "rpc")]
+pub mod rpc_server;
+
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use std::collections::HashMap;
@@ -308,6 +311,176 @@ pub struct ProviderRecord {
     pub quality_score: f64,
     /// 平均推理效率（token/s）
     pub avg_efficiency: f64,
+    // ========================================================================
+    // P2-4：质量历史扩展字段
+    // ========================================================================
+    
+    /// 质量历史记录
+    pub quality_history: QualityHistory,
+    /// 可靠性指标
+    pub reliability_metrics: ReliabilityMetrics,
+}
+
+/// 质量历史 - 记录提供商的质量表现
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct QualityHistory {
+    /// 质量验证总次数
+    pub total_quality_checks: u64,
+    /// 通过质量验证次数
+    pub passed_quality_checks: u64,
+    /// 平均质量分数（0.0 - 1.0）
+    pub avg_quality_score: f64,
+    /// 质量分数趋势（最近 10 次）
+    pub recent_quality_scores: Vec<f64>,
+    /// 质量问题记录
+    pub quality_issues: Vec<QualityIssueRecord>,
+}
+
+/// 质量问题是记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityIssueRecord {
+    /// 时间戳
+    pub timestamp: u64,
+    /// 问题类型
+    pub issue_type: String,
+    /// 严重程度（0.0 - 1.0）
+    pub severity: f64,
+    /// 问题描述
+    pub description: String,
+}
+
+/// 可靠性指标 - 量化提供商的可靠程度
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReliabilityMetrics {
+    /// 可用性（正常运行时间比例，0.0 - 1.0）
+    pub availability: f64,
+    /// 平均响应时间（毫秒）
+    pub avg_response_time_ms: f64,
+    /// 响应时间标准差（毫秒）
+    pub response_time_std_ms: f64,
+    /// 任务完成率（0.0 - 1.0）
+    pub completion_rate: f64,
+    /// 超时率（0.0 - 1.0）
+    pub timeout_rate: f64,
+    /// 错误率（0.0 - 1.0）
+    pub error_rate: f64,
+    /// 连续成功次数
+    pub consecutive_successes: u64,
+    /// 最大连续成功次数
+    pub max_consecutive_successes: u64,
+    /// SLA 达成率（0.0 - 1.0）
+    pub sla_compliance: f64,
+}
+
+impl ReliabilityMetrics {
+    /// 计算综合可靠性得分（0.0 - 1.0）
+    pub fn compute_reliability_score(&self) -> f64 {
+        // 加权平均：可用性 30% + 完成率 25% + SLA 20% + 低错误率 15% + 低超时率 10%
+        let availability_score = self.availability;
+        let completion_score = self.completion_rate;
+        let sla_score = self.sla_compliance;
+        let error_score = 1.0 - self.error_rate.min(1.0);
+        let timeout_score = 1.0 - self.timeout_rate.min(1.0);
+        
+        availability_score * 0.30
+            + completion_score * 0.25
+            + sla_score * 0.20
+            + error_score * 0.15
+            + timeout_score * 0.10
+    }
+}
+
+impl QualityHistory {
+    /// 记录质量检查结果
+    pub fn record_quality_check(&mut self, score: f64, passed: bool) {
+        self.total_quality_checks += 1;
+        if passed {
+            self.passed_quality_checks += 1;
+        }
+        
+        // 更新平均分数
+        let n = self.total_quality_checks as f64;
+        self.avg_quality_score = ((self.avg_quality_score * (n - 1.0)) + score) / n;
+        
+        // 更新最近记录（保留最近 10 次）
+        self.recent_quality_scores.push(score);
+        if self.recent_quality_scores.len() > 10 {
+            self.recent_quality_scores.remove(0);
+        }
+    }
+    
+    /// 记录质量问题
+    pub fn record_quality_issue(&mut self, issue_type: String, severity: f64, description: String) {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        
+        self.quality_issues.push(QualityIssueRecord {
+            timestamp,
+            issue_type,
+            severity,
+            description,
+        });
+        
+        // 保留最近 50 条记录
+        if self.quality_issues.len() > 50 {
+            self.quality_issues.remove(0);
+        }
+    }
+    
+    /// 获取质量通过率
+    pub fn pass_rate(&self) -> f64 {
+        if self.total_quality_checks == 0 {
+            1.0
+        } else {
+            self.passed_quality_checks as f64 / self.total_quality_checks as f64
+        }
+    }
+}
+
+impl ReliabilityMetrics {
+    /// 记录响应时间
+    pub fn record_response_time(&mut self, response_time_ms: f64) {
+        // 更新平均响应时间
+        let n = self.avg_response_time_ms;
+        if n == 0.0 {
+            self.avg_response_time_ms = response_time_ms;
+            self.response_time_std_ms = 0.0;
+        } else {
+            let old_mean = self.avg_response_time_ms;
+            self.avg_response_time_ms = ((old_mean * (n - 1.0)) + response_time_ms) / n;
+            
+            // 简化标准差计算
+            self.response_time_std_ms = (self.response_time_std_ms + (response_time_ms - old_mean).abs()) / 2.0;
+        }
+    }
+    
+    /// 记录任务完成
+    pub fn record_completion(&mut self, success: bool, timed_out: bool, error: bool) {
+        if success {
+            self.consecutive_successes += 1;
+            self.max_consecutive_successes = self.max_consecutive_successes.max(self.consecutive_successes);
+        } else {
+            self.consecutive_successes = 0;
+        }
+        
+        // 更新完成率
+        let total = self.completion_rate;
+        self.completion_rate = if success {
+            (total * (self.completion_rate * 100.0) + 1.0) / (self.completion_rate * 100.0 + 1.0)
+        } else {
+            total * (self.completion_rate * 100.0) / (self.completion_rate * 100.0 + 1.0)
+        };
+        
+        if timed_out {
+            self.timeout_rate = (self.timeout_rate * 100.0 + 1.0) / 101.0;
+        }
+        
+        if error {
+            self.error_rate = (self.error_rate * 100.0 + 1.0) / 101.0;
+        }
+    }
 }
 
 /// 提供商状态枚举
@@ -347,6 +520,8 @@ impl ProviderRecord {
             total_inferences: 0,
             quality_score: 1.0,
             avg_efficiency: 0.0,
+            quality_history: QualityHistory::default(),
+            reliability_metrics: ReliabilityMetrics::default(),
         }
     }
 

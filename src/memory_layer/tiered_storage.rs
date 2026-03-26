@@ -38,12 +38,15 @@
 //! | < 4     | < 5 分钟     | L1 内存  |
 //! | < 2     | > 5 分钟     | L2 磁盘  |
 
+#![cfg(feature = "tiered-storage")]
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use serde::{Serialize, Deserialize};
+use anyhow::{Result, Context};
 
 /// KV 数据结构（简化版，实际应该根据项目需求定义）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -269,10 +272,10 @@ impl TieredStorageManager {
     /// # 返回
     ///
     /// * `Result<Self, String>` - 存储管理器或错误
-    pub fn new(config: TieredStorageConfig) -> Result<Self, String> {
+    pub fn new(config: TieredStorageConfig) -> Result<Self> {
         // 确保磁盘目录存在
         std::fs::create_dir_all(&config.disk_path)
-            .map_err(|e| format!("Failed to create disk directory: {}", e))?;
+            .with_context(|| format!("Failed to create disk directory: {}", config.disk_path.display()))?;
 
         Ok(TieredStorageManager {
             cpu_cache: Arc::new(RwLock::new(LruCache::new(config.cpu_cache_size))),
@@ -291,7 +294,7 @@ impl TieredStorageManager {
     /// # 返回
     ///
     /// * `Result<Self, String>` - 存储管理器或错误
-    pub fn with_default_config(disk_path: &Path) -> Result<Self, String> {
+    pub fn with_default_config(disk_path: &Path) -> Result<Self> {
         let config = TieredStorageConfig {
             disk_path: disk_path.to_path_buf(),
             ..Default::default()
@@ -308,7 +311,7 @@ impl TieredStorageManager {
     /// # 返回
     ///
     /// * `Result<Option<KvData>, String>` - KV 数据或错误
-    pub async fn get(&self, key: &str) -> Result<Option<KvData>, String> {
+    pub async fn get(&self, key: &str) -> Result<Option<KvData>> {
         // 更新访问统计
         self.record_access(key).await;
 
@@ -324,9 +327,9 @@ impl TieredStorageManager {
         let disk_path = self.disk_path.join(format!("{}.kv", key));
         if disk_path.exists() {
             let data = tokio::fs::read(&disk_path).await
-                .map_err(|e| format!("Failed to read from disk: {}", e))?;
+                .with_context(|| format!("Failed to read from disk: {}", disk_path.display()))?;
             let kv_data: KvData = bincode::deserialize(&data)
-                .map_err(|e| format!("Failed to deserialize KV data: {}", e))?;
+                .context("Failed to deserialize KV data")?;
 
             // 提升到 CPU 内存缓存
             self.promote_to_cpu(key, &kv_data).await;
@@ -347,7 +350,7 @@ impl TieredStorageManager {
     /// # 返回
     ///
     /// * `Result<(), String>` - 成功或错误
-    pub async fn put(&self, key: String, value: KvData) -> Result<(), String> {
+    pub async fn put(&self, key: String, value: KvData) -> Result<()> {
         let stats = self.access_stats.read().await;
         let access_count = stats.get(&key).map(|s| s.count).unwrap_or(0);
         drop(stats);
@@ -370,7 +373,7 @@ impl TieredStorageManager {
     /// 后台任务：定期降级冷数据
     ///
     /// 应该定期调用（例如每 5 分钟）
-    pub async fn demote_cold_data(&self) -> Result<usize, String> {
+    pub async fn demote_cold_data(&self) -> Result<usize> {
         let stats = self.access_stats.read().await;
         let mut demoted_count = 0;
 
@@ -410,7 +413,7 @@ impl TieredStorageManager {
     }
 
     /// 获取磁盘上 KV 文件数量
-    pub async fn disk_file_count(&self) -> Result<usize, String> {
+    pub async fn disk_file_count(&self) -> Result<usize> {
         let mut count = 0;
         if let Ok(mut entries) = tokio::fs::read_dir(&self.disk_path).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
@@ -442,24 +445,24 @@ impl TieredStorageManager {
     }
 
     /// 写入 CPU 内存缓存
-    async fn write_to_cpu(&self, key: String, value: KvData) -> Result<(), String> {
+    async fn write_to_cpu(&self, key: String, value: KvData) -> Result<()> {
         let mut cpu = self.cpu_cache.write().await;
         cpu.put(key, value);
         Ok(())
     }
 
     /// 写入磁盘
-    async fn write_to_disk(&self, key: String, value: KvData) -> Result<(), String> {
+    async fn write_to_disk(&self, key: String, value: KvData) -> Result<()> {
         let disk_path = self.disk_path.join(format!("{}.kv", key));
         let data = bincode::serialize(&value)
-            .map_err(|e| format!("Failed to serialize KV data: {}", e))?;
+            .context("Failed to serialize KV data")?;
         tokio::fs::write(&disk_path, data).await
-            .map_err(|e| format!("Failed to write to disk: {}", e))?;
+            .with_context(|| format!("Failed to write to disk: {}", disk_path.display()))?;
         Ok(())
     }
 
     /// 降级键（从 CPU 缓存移除，保留在磁盘）
-    async fn demote_key(&self, key: &str) -> Result<bool, String> {
+    async fn demote_key(&self, key: &str) -> Result<bool> {
         let mut cpu = self.cpu_cache.write().await;
         if cpu.remove(&key.to_string()).is_some() {
             // 确保磁盘上有数据
@@ -481,12 +484,12 @@ impl TieredStorageManager {
 }
 
 /// KV 序列化/反序列化辅助函数
-pub fn serialize_kv(kv: &KvData) -> Result<Vec<u8>, String> {
-    bincode::serialize(kv).map_err(|e| format!("Serialization error: {}", e))
+pub fn serialize_kv(kv: &KvData) -> Result<Vec<u8>> {
+    bincode::serialize(kv).context("Serialization error")
 }
 
-pub fn deserialize_kv(data: &[u8]) -> Result<KvData, String> {
-    bincode::deserialize(data).map_err(|e| format!("Deserialization error: {}", e))
+pub fn deserialize_kv(data: &[u8]) -> Result<KvData> {
+    bincode::deserialize(data).context("Deserialization error")
 }
 
 #[cfg(test)]

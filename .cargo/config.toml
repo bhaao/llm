@@ -1,0 +1,13 @@
+[build]
+# Enable incremental compilation for faster builds
+incremental = true
+
+[target.x86_64-unknown-linux-gnu]
+# Linker configuration for faster linking
+# linker = "lld"
+
+[alias]
+# Convenience aliases
+lint = "clippy"
+fmt = "fmt --check"
+test-all = "test --all-features"

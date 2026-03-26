@@ -62,8 +62,26 @@
 //! - **仅向推理提供商开放只读/写权限**：需持有效访问凭证
 //! - **热点数据本地化缓存**：性能保障
 
+#[cfg(feature = "tiered-storage")]
 pub mod tiered_storage;
+#[cfg(feature = "tiered-storage")]
+pub mod multi_level_cache;
+#[cfg(feature = "remote-storage")]
+pub mod redis_backend;
+#[cfg(feature = "tiered-storage")]
 pub mod kv_compression;
+#[cfg(feature = "tiered-storage")]
+pub mod kv_chunk;
+#[cfg(feature = "tiered-storage")]
+pub mod kv_index;
+#[cfg(feature = "tiered-storage")]
+pub mod async_storage;
+#[cfg(feature = "tiered-storage")]
+pub mod kv_compressor;
+#[cfg(feature = "tiered-storage")]
+pub mod prefetcher;
+#[cfg(feature = "tiered-storage")]
+pub mod context_sharding;
 
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
@@ -210,6 +228,13 @@ pub struct MemoryBlock {
     /// 区块是否已密封（提交后不可修改）
     pub is_sealed: bool,
     /// 副本位置列表（节点 ID）
+    ///
+    /// ⚠️ **注意**：当前实现仅记录副本位置，未实现同步协议
+    /// - 缺少 Gossip/Raft 协议保证一致性
+    /// - 节点宕机后副本数据丢失问题未处理
+    /// - 跨节点冲突解决机制待实现
+    ///
+    /// 详见 `gossip` 模块的原型实现和生产就绪度说明。
     pub replica_locations: Vec<String>,
     /// 区块是否已回滚
     pub is_rolled_back: bool,
@@ -835,5 +860,297 @@ mod tests {
 
         assert!(manager.verify_hash(0, &expected_hash));
         assert!(!manager.verify_hash(0, "invalid_hash"));
+    }
+}
+
+// ==================== 异步记忆层管理器 ====================
+
+/// 异步记忆层管理器 - 使用 tokio 同步原语的异步版本
+///
+/// **核心特点**：
+/// - 使用 `tokio::sync::RwLock` 包装内部状态，支持异步读写
+/// - 提供 `async/await` 接口，避免阻塞异步运行时
+/// - 适用于高并发场景
+///
+/// # 使用示例
+///
+/// ```ignore
+/// use block_chain_with_context::memory_layer::AsyncMemoryLayerManager;
+/// use std::sync::Arc;
+///
+/// let manager = AsyncMemoryLayerManager::new("node_1");
+/// let manager = Arc::new(manager);
+///
+/// // 并发读写
+/// let mgr1 = manager.clone();
+/// tokio::spawn(async move {
+///     mgr1.write_kv("key".to_string(), b"value".to_vec(), &credential).await
+/// });
+/// ```
+#[derive(Clone)]
+pub struct AsyncMemoryLayerManager {
+    inner: Arc<tokio::sync::RwLock<MemoryLayerManager>>,
+}
+
+impl AsyncMemoryLayerManager {
+    /// 创建新的异步记忆层管理器
+    pub fn new(generator_node_id: &str) -> Self {
+        let manager = MemoryLayerManager::new(generator_node_id);
+        AsyncMemoryLayerManager {
+            inner: Arc::new(tokio::sync::RwLock::new(manager)),
+        }
+    }
+
+    /// 从现有的 MemoryLayerManager 创建异步版本
+    pub fn from_manager(manager: MemoryLayerManager) -> Self {
+        AsyncMemoryLayerManager {
+            inner: Arc::new(tokio::sync::RwLock::new(manager)),
+        }
+    }
+
+    /// 获取内部 MemoryLayerManager 的只读引用
+    ///
+    /// **注意**: 此方法会获取读锁，应尽快释放以避免阻塞写操作
+    pub async fn get_manager(&self) -> tokio::sync::RwLockReadGuard<'_, MemoryLayerManager> {
+        self.inner.read().await
+    }
+
+    /// 写入 KV 数据（异步版本）
+    ///
+    /// # 参数
+    ///
+    /// * `key` - KV 键
+    /// * `value` - KV 值
+    /// * `provider_credential` - 访问凭证
+    ///
+    /// # 返回
+    ///
+    /// * `Result<(), String>` - 成功或错误
+    pub async fn write_kv(
+        &self,
+        key: String,
+        value: Vec<u8>,
+        provider_credential: &AccessCredential,
+    ) -> Result<(), String> {
+        let mut manager = self.inner.write().await;
+        manager.write_kv(key, value, provider_credential)
+    }
+
+    /// 读取 KV 数据（异步版本）
+    ///
+    /// # 参数
+    ///
+    /// * `key` - KV 键
+    /// * `provider_credential` - 访问凭证
+    ///
+    /// # 返回
+    ///
+    /// * `Option<KvShard>` - KV 分片或 None
+    pub async fn read_kv(
+        &self,
+        key: &str,
+        provider_credential: &AccessCredential,
+    ) -> Option<KvShard> {
+        let manager = self.inner.read().await;
+        manager.read_kv(key, provider_credential)
+    }
+
+    /// 密封当前区块（异步版本）
+    pub async fn seal_current_block(&self) {
+        let mut manager = self.inner.write().await;
+        manager.seal_current_block();
+    }
+
+    /// 添加副本位置（异步版本）
+    pub async fn add_replica(&self, block_index: u64, node_id: String) -> Result<(), String> {
+        let mut manager = self.inner.write().await;
+        manager.add_replica(block_index, node_id)
+    }
+
+    /// 获取副本位置（异步版本）
+    pub async fn get_replicas(&self, block_index: u64) -> Option<Vec<String>> {
+        let manager = self.inner.read().await;
+        manager.get_replicas(block_index).cloned()
+    }
+
+    /// 验证记忆链完整性（异步版本）
+    pub async fn verify_chain(&self) -> bool {
+        let manager = self.inner.read().await;
+        manager.verify_chain()
+    }
+
+    /// 获取最新区块索引（异步版本）
+    pub async fn latest_block_index(&self) -> u64 {
+        let manager = self.inner.read().await;
+        manager.latest_block_index()
+    }
+
+    /// 获取区块高度（异步版本）
+    pub async fn height(&self) -> u64 {
+        let manager = self.inner.read().await;
+        manager.height()
+    }
+
+    /// 获取最新区块（异步版本）
+    pub async fn latest_block(&self) -> Option<MemoryBlock> {
+        let manager = self.inner.read().await;
+        manager.latest_block().cloned()
+    }
+
+    /// 获取区块（异步版本）
+    pub async fn get_block(&self, index: u64) -> Option<MemoryBlock> {
+        let manager = self.inner.read().await;
+        manager.get_block(index).cloned()
+    }
+
+    /// 创建新的记忆区块（异步版本）
+    pub async fn create_new_block(&self, generator_node_id: &str) -> Option<MemoryBlock> {
+        let mut manager = self.inner.write().await;
+        manager.create_new_block(generator_node_id);
+        manager.latest_block().cloned()
+    }
+
+    /// 获取所有 KV 证明（异步版本）
+    pub async fn get_all_kv_proofs(&self) -> Vec<KvProof> {
+        let manager = self.inner.read().await;
+        manager.get_all_kv_proofs()
+    }
+
+    /// 添加到热点缓存（异步版本）
+    pub async fn add_to_hot_cache(&self, key: String, shard: KvShard) {
+        let mut manager = self.inner.write().await;
+        manager.add_to_hot_cache(key, shard);
+    }
+
+    /// 获取区块数量（异步版本）
+    pub async fn block_count(&self) -> usize {
+        let manager = self.inner.read().await;
+        manager.block_count()
+    }
+
+    /// 获取总 KV 数量（异步版本）
+    pub async fn total_kv_count(&self) -> usize {
+        let manager = self.inner.read().await;
+        manager.total_kv_count()
+    }
+
+    /// 标记当前区块为已回滚（异步版本）
+    pub async fn mark_current_block_as_rolled_back(&self) -> Result<(), String> {
+        let mut manager = self.inner.write().await;
+        manager.mark_current_block_as_rolled_back()
+    }
+
+    /// 获取回滚的 KV 快照（异步版本）
+    pub async fn get_rolled_back_snapshot(&self, block_index: u64) -> Option<Vec<KvShard>> {
+        let manager = self.inner.read().await;
+        manager.get_rolled_back_snapshot(block_index)
+    }
+
+    /// 检查区块是否已回滚（异步版本）
+    pub async fn is_block_rolled_back(&self, block_index: u64) -> bool {
+        let manager = self.inner.read().await;
+        manager.is_block_rolled_back(block_index)
+    }
+
+    /// 验证哈希（异步版本）
+    pub async fn verify_hash(&self, block_index: u64, expected_hash: &str) -> bool {
+        let manager = self.inner.read().await;
+        manager.verify_hash(block_index, expected_hash)
+    }
+
+    /// 验证访问权限（异步版本）
+    pub async fn verify_access(&self, block_index: u64, credential: &AccessCredential) -> bool {
+        let manager = self.inner.read().await;
+        manager.get_block(block_index)
+            .map(|b| b.verify_access(credential))
+            .unwrap_or(false)
+    }
+}
+
+#[cfg(test)]
+mod async_memory_layer_tests {
+    use super::*;
+    use crate::node_layer::{AccessType, AccessCredential};
+
+    fn create_test_credential() -> AccessCredential {
+        AccessCredential {
+            credential_id: "test_cred".to_string(),
+            provider_id: "provider_1".to_string(),
+            memory_block_ids: vec!["all".to_string()],
+            access_type: AccessType::ReadWrite,
+            expires_at: u64::MAX,
+            issuer_node_id: "node_1".to_string(),
+            signature: "test_signature".to_string(),
+            is_revoked: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_async_memory_layer_write_read() {
+        let manager = AsyncMemoryLayerManager::new("node_1");
+        let credential = create_test_credential();
+
+        // 写入 KV
+        manager.write_kv("key_1".to_string(), b"value_1".to_vec(), &credential).await.unwrap();
+        manager.write_kv("key_2".to_string(), b"value_2".to_vec(), &credential).await.unwrap();
+
+        // 读取 KV
+        let shard = manager.read_kv("key_1", &credential).await.unwrap();
+        assert_eq!(shard.key, "key_1");
+        assert_eq!(shard.value, b"value_1");
+    }
+
+    #[tokio::test]
+    async fn test_async_memory_layer_concurrent() {
+        use std::sync::Arc;
+
+        let manager = Arc::new(AsyncMemoryLayerManager::new("node_1"));
+        let credential = create_test_credential();
+
+        // 并发写入
+        let mut handles = vec![];
+        for i in 0..10 {
+            let mgr = manager.clone();
+            let cred = credential.clone();
+            let handle = tokio::spawn(async move {
+                mgr.write_kv(format!("key_{}", i), format!("value_{}", i).into_bytes(), &cred).await
+            });
+            handles.push(handle);
+        }
+
+        // 等待所有写入完成
+        for handle in handles {
+            handle.await.unwrap().unwrap();
+        }
+
+        // 验证所有数据都已写入
+        for i in 0..10 {
+            let shard = manager.read_kv(&format!("key_{}", i), &credential).await;
+            assert!(shard.is_some());
+            assert_eq!(shard.unwrap().value, format!("value_{}", i).into_bytes());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_async_memory_chain_verification() {
+        let manager = AsyncMemoryLayerManager::new("node_1");
+        let credential = create_test_credential();
+
+        // 写入多个区块
+        for i in 0..5 {
+            manager.write_kv(
+                format!("key_{}", i),
+                format!("value_{}", i).into_bytes(),
+                &credential,
+            ).await.unwrap();
+
+            // 密封当前区块，强制创建新区块
+            if i % 2 == 0 {
+                manager.seal_current_block().await;
+            }
+        }
+
+        // 验证链完整性
+        assert!(manager.verify_chain().await);
     }
 }

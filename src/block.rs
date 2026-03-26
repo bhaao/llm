@@ -4,6 +4,9 @@ use crate::traits::{Hashable, Serializable, Verifiable, Attestable, AttestationM
 use crate::transaction::Transaction;
 use crate::metadata::BlockMetadata;
 use crate::utils::merkle_root;
+use crate::quality_assessment::QualityProof;
+use crate::audit::AuditTrail;
+use crate::consensus::certificate::QuorumCertificate;
 
 /// KV Cache 存证 - 用于链上存证 KV 数据
 ///
@@ -11,6 +14,12 @@ use crate::utils::merkle_root;
 /// - 将 KV 块的哈希上链，实现数据不可篡改
 /// - 可验证 KV 数据是否被恶意篡改
 /// - 支持跨节点 KV 一致性校验
+///
+/// # 李群扩展（第四层）
+///
+/// 扩展支持李代数/李群承诺上链：
+/// - `lie_algebra_commitment`: 李代数元素哈希 hash(A_i)
+/// - `lie_group_root`: 全局李群状态哈希 hash(G)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KvCacheProof {
     /// KV 块标识
@@ -23,6 +32,12 @@ pub struct KvCacheProof {
     pub kv_size: u64,
     /// 时间戳
     pub timestamp: u64,
+    /// 李代数承诺哈希 hash(A_i)（可选，李群验证启用时填写）
+    #[serde(default)]
+    pub lie_algebra_commitment: Option<String>,
+    /// 全局李群根哈希 hash(G)（可选，李群验证启用时填写）
+    #[serde(default)]
+    pub lie_group_root: Option<String>,
 }
 
 impl KvCacheProof {
@@ -38,7 +53,24 @@ impl KvCacheProof {
             node_id,
             kv_size,
             timestamp,
+            lie_algebra_commitment: None,
+            lie_group_root: None,
         }
+    }
+
+    /// 创建带李群承诺的 KV 存证
+    pub fn with_lie_group(
+        kv_block_id: String,
+        kv_hash: String,
+        node_id: String,
+        kv_size: u64,
+        lie_algebra_commitment: String,
+        lie_group_root: String,
+    ) -> Self {
+        let mut proof = Self::new(kv_block_id, kv_hash, node_id, kv_size);
+        proof.lie_algebra_commitment = Some(lie_algebra_commitment);
+        proof.lie_group_root = Some(lie_group_root);
+        proof
     }
 
     /// 验证 KV 数据完整性
@@ -54,12 +86,18 @@ impl KvCacheProof {
 
 impl Hashable for KvCacheProof {
     fn hash(&self) -> String {
+        // 包含李群承诺字段（如果存在）
+        let lie_alg = self.lie_algebra_commitment.as_deref().unwrap_or("");
+        let lie_group = self.lie_group_root.as_deref().unwrap_or("");
+        
         let data = format!(
-            "{}:{}:{}:{}",
+            "{}:{}:{}:{}:{}:{}",
             self.kv_block_id,
             self.kv_hash,
             self.node_id,
-            self.kv_size
+            self.kv_size,
+            lie_alg,
+            lie_group
         );
         format!("{:x}", Sha256::digest(data.as_bytes()))
     }
@@ -71,6 +109,9 @@ impl Hashable for KvCacheProof {
 /// - 交易：推理请求/响应记录
 /// - KV Cache 存证：用于验证 KV 数据完整性（创新 A）
 /// - 存证元数据：链上存证信息（创新 B/C/D）
+/// - 质量证明：P11 要求 5 - 质量 proof 上链
+/// - 共识证书：P11 要求 5 - 共识结果存证
+/// - 审计链：P11 要求 5 - 全链路可追溯
 ///
 /// **安全特性**：
 /// - `is_sealed` 标记区块是否已提交到链上
@@ -99,6 +140,15 @@ pub struct Block {
     /// 区块是否已密封（提交到链上后不可修改）
     #[serde(default)]
     pub is_sealed: bool,
+    /// 质量证明列表（P11 要求 5）
+    #[serde(default)]
+    pub quality_proofs: Vec<QualityProof>,
+    /// 共识证书列表（P11 要求 5）
+    #[serde(default)]
+    pub consensus_certificates: Vec<QuorumCertificate>,
+    /// 审计链（P11 要求 5）
+    #[serde(default)]
+    pub audit_trail: AuditTrail,
 }
 
 impl Clone for Block {
@@ -114,6 +164,9 @@ impl Clone for Block {
             kv_proofs: self.kv_proofs.clone(),
             attestation: self.attestation.clone(),
             is_sealed: self.is_sealed,
+            quality_proofs: self.quality_proofs.clone(),
+            consensus_certificates: self.consensus_certificates.clone(),
+            audit_trail: self.audit_trail.clone(),
         }
     }
 }
@@ -142,6 +195,9 @@ impl Block {
             kv_proofs,
             attestation,
             is_sealed: false,
+            quality_proofs: Vec::new(),
+            consensus_certificates: Vec::new(),
+            audit_trail: AuditTrail::new(),
         };
 
         block.hash = block.calculate_hash();
@@ -300,12 +356,12 @@ impl Verifiable for Block {
             ));
         }
 
-        self.verify_attestation_with_error()
-            .map_err(|e| format!("Attestation invalid: {}", e))?;
+        self.verify_attestation_with_error()?;
 
         for (i, tx) in self.transactions.iter().enumerate() {
-            tx.verify_with_error()
-                .map_err(|e| format!("Transaction {} invalid: {}", i, e))?;
+            tx.verify_with_error().map_err(|e| {
+                format!("Transaction {} invalid: {}", i, e)
+            })?;
         }
 
         Ok(())
@@ -314,11 +370,11 @@ impl Verifiable for Block {
 
 impl Serializable for Block {
     fn to_json(&self) -> Result<String, String> {
-        serde_json::to_string(self).map_err(|e| e.to_string())
+        serde_json::to_string(self).map_err(|e| format!("Failed to serialize block: {}", e))
     }
 
     fn from_json(json: &str) -> Result<Self, String> {
-        serde_json::from_str(json).map_err(|e| e.to_string())
+        serde_json::from_str(json).map_err(|e| format!("Failed to deserialize block: {}", e))
     }
 }
 

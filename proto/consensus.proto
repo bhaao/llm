@@ -1,0 +1,309 @@
+// PBFT 共识和 Gossip 同步的 gRPC 服务定义
+// 用于实现真实的分布式共识和数据同步
+
+syntax = "proto3";
+
+package consensus;
+
+// ==================== PBFT 共识消息 ====================
+
+// PBFT 消息类型
+enum PbftMessageType {
+    PRE_PREPARE = 0;
+    PREPARE = 1;
+    COMMIT = 2;
+    VIEW_CHANGE = 3;
+    NEW_VIEW = 4;
+    CHECKPOINT = 5;
+}
+
+// 签名的 PBFT 消息
+message SignedPbftMessage {
+    // 消息类型
+    PbftMessageType message_type = 1;
+    // 发送者节点 ID
+    string sender_id = 2;
+    // 视图号
+    uint64 view = 3;
+    // 序列号
+    uint64 sequence = 4;
+    // 消息摘要
+    string digest = 5;
+    // 序列化的消息内容（根据类型不同而不同）
+    bytes message_data = 6;
+    // Ed25519 签名
+    bytes signature = 7;
+    // 发送者公钥
+    bytes public_key = 8;
+    // 时间戳
+    uint64 timestamp = 9;
+}
+
+// Pre-prepare 消息数据
+message PrePrepareData {
+    string leader = 1;
+    bytes request = 2;
+}
+
+// Prepare 消息数据
+message PrepareData {
+    string replica_id = 1;
+}
+
+// Commit 消息数据
+message CommitData {
+    string replica_id = 1;
+}
+
+// ViewChange 消息数据
+message ViewChangeData {
+    uint64 new_view = 1;
+    uint64 last_stable_checkpoint = 2;
+    string checkpoint_digest = 3;
+    // 已准备但未提交的消息列表
+    repeated PreparedLogEntry prepared_log = 4;
+}
+
+// 已准备的消息日志条目
+message PreparedLogEntry {
+    uint64 view = 1;
+    uint64 sequence = 2;
+    string digest = 3;
+    bytes prepare_certificate = 4;
+}
+
+// NewView 消息数据
+message NewViewData {
+    uint64 new_view = 1;
+    string new_leader = 2;
+    // 视图变更证明
+    repeated SignedPbftMessage view_change_proofs = 3;
+    // 需要重新广播的预准备消息
+    repeated SignedPbftMessage pre_prepares = 4;
+}
+
+// Checkpoint 消息数据
+message CheckpointData {
+    uint64 sequence = 1;
+    string state_digest = 2;
+}
+
+// ==================== Gossip 同步消息 ====================
+
+// Gossip 消息类型
+enum GossipMessageType {
+    SHARD_SYNC = 0;
+    VECTOR_CLOCK_UPDATE = 1;
+    MERKLE_PROOF = 2;
+    HEARTBEAT = 3;
+}
+
+// Gossip 消息
+message GossipMessage {
+    // 消息类型
+    GossipMessageType message_type = 1;
+    // 发送者节点 ID
+    string sender_id = 2;
+    // 分片 ID
+    string shard_id = 3;
+    // 序列化的 KV 分片数据
+    bytes shard_data = 4;
+    // Vector Clock
+    VectorClock vector_clock = 5;
+    // Merkle 证明
+    MerkleProof merkle_proof = 6;
+    // 时间戳
+    uint64 timestamp = 7;
+    // 签名
+    bytes signature = 8;
+}
+
+// Vector Clock
+message VectorClock {
+    // 节点 ID -> 计数器
+    map<string, uint64> clocks = 1;
+}
+
+// Merkle 证明
+message MerkleProof {
+    // Merkle 根
+    string merkle_root = 1;
+    // 证明路径
+    repeated string proof_path = 2;
+    // 叶子节点哈希
+    string leaf_hash = 3;
+}
+
+// KV 分片数据
+message KvShardData {
+    string shard_id = 1;
+    // 键值对数据
+    map<string, bytes> data = 2;
+    // 版本（Vector Clock）
+    VectorClock version = 3;
+    // Merkle 根
+    string merkle_root = 4;
+    // 最后更新时间
+    uint64 last_updated = 5;
+}
+
+// ==================== 共识服务 ====================
+
+// ConsensusService - PBFT 共识广播服务
+service ConsensusService {
+    // 广播 PBFT 消息到所有节点
+    rpc Broadcast(BroadcastRequest) returns (BroadcastResponse);
+    
+    // 发送 PBFT 消息到指定节点
+    rpc SendTo(SendToRequest) returns (SendToResponse);
+    
+    // 流式接收 PBFT 消息（用于节点启动时同步）
+    rpc SubscribeToConsensus(SubscribeRequest) returns (stream SignedPbftMessage);
+}
+
+// Broadcast 请求
+message BroadcastRequest {
+    // 发送者节点 ID
+    string sender_id = 1;
+    // 签名的 PBFT 消息
+    SignedPbftMessage message = 2;
+    // 消息主题（pbft, view_change 等）
+    string topic = 3;
+}
+
+// Broadcast 响应
+message BroadcastResponse {
+    // 是否成功
+    bool success = 1;
+    // 错误信息
+    optional string error = 2;
+    // 接收到的节点数
+    uint32 received_count = 3;
+}
+
+// SendTo 请求
+message SendToRequest {
+    // 发送者节点 ID
+    string sender_id = 1;
+    // 目标节点 ID
+    string target_id = 2;
+    // 签名的 PBFT 消息
+    SignedPbftMessage message = 3;
+}
+
+// SendTo 响应
+message SendToResponse {
+    // 是否成功
+    bool success = 1;
+    // 错误信息
+    optional string error = 2;
+}
+
+// Subscribe 请求
+message SubscribeRequest {
+    // 订阅的主题
+    string topic = 1;
+    // 起始序列号（用于历史消息同步）
+    optional uint64 from_sequence = 2;
+}
+
+// ==================== Gossip 同步服务 ====================
+
+// GossipService - Gossip 数据同步服务
+service GossipService {
+    // 推送 Gossip 消息
+    rpc PushGossip(PushGossipRequest) returns (PushGossipResponse);
+    
+    // 请求分片数据
+    rpc RequestShard(ShardRequest) returns (ShardResponse);
+    
+    // 流式同步分片（用于全量同步）
+    rpc SyncShards(SyncRequest) returns (stream GossipMessage);
+    
+    // 心跳
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+// PushGossip 请求
+message PushGossipRequest {
+    // 发送者节点 ID
+    string sender_id = 1;
+    // Gossip 消息
+    GossipMessage message = 2;
+}
+
+// PushGossip 响应
+message PushGossipResponse {
+    // 是否成功
+    bool success = 1;
+    // 错误信息
+    optional string error = 2;
+    // 本地版本（用于冲突解决）
+    VectorClock local_version = 3;
+}
+
+// Shard 请求
+message ShardRequest {
+    // 请求者节点 ID
+    string requester_id = 1;
+    // 分片 ID
+    string shard_id = 2;
+    // 请求者的版本
+    VectorClock requester_version = 3;
+}
+
+// Shard 响应
+message ShardResponse {
+    // 是否成功
+    bool success = 1;
+    // 错误信息
+    optional string error = 2;
+    // 分片数据（如果有更新）
+    optional KvShardData shard_data = 3;
+    // 是否需要请求者更新
+    bool has_update = 4;
+}
+
+// Sync 请求
+message SyncRequest {
+    // 请求者节点 ID
+    string requester_id = 1;
+    // 需要同步的分片 ID 列表
+    repeated string shard_ids = 2;
+}
+
+// Heartbeat 请求
+message HeartbeatRequest {
+    // 发送者节点 ID
+    string sender_id = 1;
+    // 当前视图号
+    uint64 view = 2;
+    // 节点状态
+    NodeStatus status = 3;
+    // 已知节点列表
+    repeated string known_nodes = 4;
+}
+
+// Heartbeat 响应
+message HeartbeatResponse {
+    // 是否成功
+    bool success = 1;
+    // 错误信息
+    optional string error = 2;
+    // 响应者的节点 ID
+    string responder_id = 3;
+    // 响应者的状态
+    NodeStatus status = 4;
+}
+
+// 节点状态
+message NodeStatus {
+    // 是否是 Leader
+    bool is_leader = 1;
+    // 当前序列号
+    uint64 sequence = 2;
+    // 最后稳定 checkpoint
+    uint64 last_checkpoint = 3;
+    // 节点健康状态
+    string health = 4;
+}

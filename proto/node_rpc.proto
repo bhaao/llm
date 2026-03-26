@@ -1,0 +1,263 @@
+// Protocol Buffers definitions for BlockChain with Context v0.4.0
+// gRPC service definitions for cross-node communication
+
+syntax = "proto3";
+
+package block_chain_with_context;
+
+// ==================== KV Shard Service ====================
+
+// KV 分片数据
+message KvShard {
+    string key = 1;
+    bytes value = 2;
+    uint64 version = 3;
+    uint64 created_at = 4;
+    uint64 size_bytes = 5;
+    StorageTier tier = 6;
+}
+
+// 存储层级
+enum StorageTier {
+    L1_CPU_MEMORY = 0;
+    L2_DISK = 1;
+    L3_REMOTE = 2;
+}
+
+// GetKvShard 请求
+message GetKvShardRequest {
+    string key = 1;
+    optional string node_id = 2;
+}
+
+// GetKvShard 响应
+message GetKvShardResponse {
+    oneof result {
+        KvShard shard = 1;
+        string error = 2;
+    }
+}
+
+// PutKvShard 请求
+message PutKvShardRequest {
+    KvShard shard = 1;
+    optional bool force_tier = 2;
+}
+
+// PutKvShard 响应
+message PutKvShardResponse {
+    bool success = 1;
+    optional string error = 2;
+}
+
+// DeleteKvShard 请求
+message DeleteKvShardRequest {
+    string key = 1;
+}
+
+// DeleteKvShard 响应
+message DeleteKvShardResponse {
+    bool success = 1;
+    optional string error = 2;
+}
+
+// ContainsKey 请求
+message ContainsKeyRequest {
+    string key = 1;
+}
+
+// ContainsKey 响应
+message ContainsKeyResponse {
+    bool exists = 1;
+}
+
+// ==================== Context Sharding Service ====================
+
+// SliceContext 请求
+message SliceContextRequest {
+    string context_id = 1;
+    repeated uint32 tokens = 2;
+    uint32 num_shards = 3;
+    repeated string node_ids = 4;
+}
+
+// ContextShard 消息
+message ContextShard {
+    uint64 shard_id = 1;
+    string context_id = 2;
+    repeated uint32 tokens = 3;
+    uint64 token_start_index = 4;
+    uint64 token_end_index = 5;
+    string node_id = 6;
+    bytes integrity_hash = 7;
+}
+
+// SliceContext 响应
+message SliceContextResponse {
+    repeated ContextShard shards = 1;
+    optional string error = 2;
+}
+
+// ReassembleContext 请求
+message ReassembleContextRequest {
+    repeated uint64 shard_ids = 1;
+}
+
+// ReassembleContext 响应
+message ReassembleContextResponse {
+    repeated uint32 tokens = 1;
+    optional string error = 2;
+}
+
+// ==================== Multi-Level Cache Service ====================
+
+// GetMultiLevelKv 请求
+message GetMultiLevelKvRequest {
+    string key = 1;
+}
+
+// MultiLevelKvData 消息
+message MultiLevelKvData {
+    string key = 1;
+    bytes value = 2;
+    uint64 size_bytes = 3;
+    uint64 version = 4;
+    uint64 created_at = 5;
+    uint64 last_accessed_at = 6;
+    uint32 access_count = 7;
+    StorageTier current_tier = 8;
+}
+
+// GetMultiLevelKv 响应
+message GetMultiLevelKvResponse {
+    oneof result {
+        MultiLevelKvData data = 1;
+        string error = 2;
+    }
+}
+
+// PutMultiLevelKv 请求
+message PutMultiLevelKvRequest {
+    MultiLevelKvData data = 1;
+}
+
+// PutMultiLevelKv 响应
+message PutMultiLevelKvResponse {
+    bool success = 1;
+    optional string error = 2;
+}
+
+// GetCacheMetrics 请求
+message GetCacheMetricsRequest {}
+
+// CacheMetrics 消息
+message CacheMetrics {
+    uint32 l1_entries = 1;
+    uint32 l2_entries = 2;
+    uint32 l3_entries = 3;
+    uint64 total_size_bytes = 4;
+    double l1_hit_rate = 5;
+    double overall_hit_rate = 6;
+    uint64 demote_l1_to_l2 = 7;
+    uint64 promote_l2_to_l1 = 8;
+    uint64 demote_l2_to_l3 = 9;
+}
+
+// GetCacheMetrics 响应
+message GetCacheMetricsResponse {
+    CacheMetrics metrics = 1;
+}
+
+// ==================== Blockchain Service ====================
+
+// Transaction 消息
+message Transaction {
+    string sender = 1;
+    string receiver = 2;
+    string tx_type = 3;
+    optional bytes payload = 4;
+    uint64 timestamp = 5;
+    string tx_hash = 6;
+}
+
+// SubmitTransaction 请求
+message SubmitTransactionRequest {
+    Transaction transaction = 1;
+}
+
+// SubmitTransaction 响应
+message SubmitTransactionResponse {
+    bool success = 1;
+    optional string tx_hash = 2;
+    optional string error = 3;
+}
+
+// GetBlockByHeight 请求
+message GetBlockByHeightRequest {
+    uint64 height = 1;
+}
+
+// Block 消息
+message Block {
+    uint64 height = 1;
+    bytes prev_hash = 2;
+    bytes merkle_root = 3;
+    uint64 timestamp = 4;
+    repeated Transaction transactions = 5;
+    bytes block_hash = 6;
+}
+
+// GetBlockByHeight 响应
+message GetBlockByHeightResponse {
+    oneof result {
+        Block block = 1;
+        string error = 2;
+    }
+}
+
+// ==================== Health Check Service ====================
+
+// HealthCheck 请求
+message HealthCheckRequest {}
+
+// HealthStatus 枚举
+enum HealthStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+    SERVICE_UNKNOWN = 3;
+}
+
+// HealthCheck 响应
+message HealthCheckResponse {
+    HealthStatus status = 1;
+    string node_id = 2;
+    uint64 uptime_secs = 3;
+}
+
+// ==================== Node RPC Service ====================
+
+// 节点 RPC 服务 - 提供跨节点 KV 分片访问、上下文分片、多级缓存等能力
+service NodeRpcService {
+    // KV 分片操作
+    rpc GetKvShard(GetKvShardRequest) returns (GetKvShardResponse);
+    rpc PutKvShard(PutKvShardRequest) returns (PutKvShardResponse);
+    rpc DeleteKvShard(DeleteKvShardRequest) returns (DeleteKvShardResponse);
+    rpc ContainsKey(ContainsKeyRequest) returns (ContainsKeyResponse);
+    
+    // 上下文分片操作
+    rpc SliceContext(SliceContextRequest) returns (SliceContextResponse);
+    rpc ReassembleContext(ReassembleContextRequest) returns (ReassembleContextResponse);
+    
+    // 多级缓存操作
+    rpc GetMultiLevelKv(GetMultiLevelKvRequest) returns (GetMultiLevelKvResponse);
+    rpc PutMultiLevelKv(PutMultiLevelKvRequest) returns (PutMultiLevelKvResponse);
+    rpc GetCacheMetrics(GetCacheMetricsRequest) returns (GetCacheMetricsResponse);
+    
+    // 区块链操作
+    rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
+    rpc GetBlockByHeight(GetBlockByHeightRequest) returns (GetBlockByHeightResponse);
+    
+    // 健康检查
+    rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}

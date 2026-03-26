@@ -9,8 +9,13 @@
 //! 6. 并发推理测试
 //! 7. 错误处理测试
 //! 8. 区块链存证验证测试
+//!
+//! **注意**: 此测试文件仍使用废弃的 ArchitectureCoordinator，
+//! 未来应迁移到新的服务层 API (InferenceOrchestrator, CommitmentService, FailoverService)
 
-use block_chain_with_context::coordinator::ArchitectureCoordinator;
+#![allow(deprecated)]
+
+use block_chain_with_context::deprecated::coordinator::ArchitectureCoordinator;
 use block_chain_with_context::provider_layer::{InferenceEngineType, InferenceRequest};
 use block_chain_with_context::node_layer::{AccessType, NodeIdentity, NodeRole, ProviderStatus};
 use std::sync::{Arc, RwLock};
@@ -309,17 +314,19 @@ fn test_blockchain_attestation_verification() {
 
     // 验证区块链上有存证
     let blockchain = &coordinator.blockchain;
-    let all_kv_proofs = blockchain.get_all_kv_proofs();
+    let blockchain_read = blockchain.read().unwrap();
+    let all_kv_proofs = blockchain_read.get_all_kv_proofs();
     assert!(!all_kv_proofs.is_empty());
 
     // 验证 KV 完整性
-    for proof in &all_kv_proofs {
+    for proof in all_kv_proofs.iter() {
         // 模拟验证 KV 数据
         let test_data = b"test";
         let is_valid = proof.verify_kv_integrity(test_data);
         // 由于测试数据不匹配，应该返回 false
         assert!(!is_valid);
     }
+    // blockchain_read 在这里自动 drop
 }
 
 /// 测试调度策略切换

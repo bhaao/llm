@@ -16,6 +16,9 @@
 //! - **标准化接口**：适配多引擎（vLLM/SGLang/TGI/自研）
 
 pub mod http_client;
+pub mod llm_provider;
+pub mod ollama_provider;
+pub mod ollama_stream;
 
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -193,6 +196,9 @@ impl InferenceResponse {
 }
 
 /// 推理提供商接口 trait - 所有提供商必须实现的标准化接口
+///
+/// **注意**: 这是一个异步 trait，所有实现必须使用 `async_trait` 宏
+#[async_trait::async_trait]
 pub trait InferenceProvider: Send + Sync {
     /// 获取提供商 ID
     fn provider_id(&self) -> &str;
@@ -215,7 +221,7 @@ pub trait InferenceProvider: Send + Sync {
     ///
     /// 返回：
     /// - 推理响应
-    fn execute_inference(
+    async fn execute_inference(
         &self,
         request: &InferenceRequest,
         memory: &MemoryLayerManager,
@@ -347,7 +353,22 @@ impl ProviderLayerManager {
     }
 
     /// 执行推理（使用当前提供商）
+    ///
+    /// **注意**: 此方法已被标记为 deprecated，请使用 `execute_inference_async`
+    #[deprecated(since = "0.2.0", note = "Use `execute_inference_async` instead")]
     pub fn execute_inference(
+        &self,
+        request: &InferenceRequest,
+        memory: &MemoryLayerManager,
+        credential: &AccessCredential,
+    ) -> Result<InferenceResponse, String> {
+        // 同步包装异步方法
+        tokio::runtime::Handle::current()
+            .block_on(self.execute_inference_async(request, memory, credential))
+    }
+
+    /// 执行推理（异步版本，使用当前提供商）
+    pub async fn execute_inference_async(
         &self,
         request: &InferenceRequest,
         memory: &MemoryLayerManager,
@@ -356,7 +377,7 @@ impl ProviderLayerManager {
         let provider = self.current_provider()
             .ok_or_else(|| "No current provider selected".to_string())?;
 
-        provider.execute_inference(request, memory, credential)
+        provider.execute_inference(request, memory, credential).await
     }
 
     /// 执行推理（指定提供商）
@@ -367,10 +388,43 @@ impl ProviderLayerManager {
         memory: &MemoryLayerManager,
         credential: &AccessCredential,
     ) -> Result<InferenceResponse, String> {
+        // 同步包装异步方法
+        tokio::runtime::Handle::current()
+            .block_on(self.execute_with_provider_async(provider_id, request, memory, credential))
+    }
+
+    /// 执行推理（异步版本，指定提供商）
+    pub async fn execute_with_provider_async(
+        &self,
+        provider_id: &str,
+        request: &InferenceRequest,
+        memory: &MemoryLayerManager,
+        credential: &AccessCredential,
+    ) -> Result<InferenceResponse, String> {
         let provider = self.get_provider(provider_id)
             .ok_or_else(|| format!("Provider {} not found", provider_id))?;
 
-        provider.execute_inference(request, memory, credential)
+        provider.execute_inference(request, memory, credential).await
+    }
+
+    /// 执行推理（指定提供商，可变引用版本）
+    pub fn execute(&mut self, provider_id: &str, request: &InferenceRequest, memory: &MemoryLayerManager, credential: &AccessCredential) -> Result<InferenceResponse, String> {
+        self.execute_with_provider(provider_id, request, memory, credential)
+    }
+
+    /// 获取所有提供商 ID 列表
+    pub fn list_providers(&self) -> Vec<String> {
+        self.providers.keys().cloned().collect()
+    }
+
+    /// 注册 Mock 提供商（用于测试）
+    pub fn register_mock_provider(&mut self, provider_id: String, engine_type: InferenceEngineType, throughput: u32) -> Result<(), String> {
+        let provider = Box::new(MockInferenceProvider::new(
+            provider_id.clone(),
+            engine_type,
+            throughput as u64,
+        ));
+        self.register_provider(provider)
     }
 
     /// 提供商数量
@@ -497,6 +551,7 @@ impl MockInferenceProvider {
     }
 }
 
+#[async_trait::async_trait]
 impl InferenceProvider for MockInferenceProvider {
     fn provider_id(&self) -> &str {
         &self.provider_id
@@ -514,7 +569,7 @@ impl InferenceProvider for MockInferenceProvider {
         self.compute_capacity
     }
 
-    fn execute_inference(
+    async fn execute_inference(
         &self,
         request: &InferenceRequest,
         memory: &MemoryLayerManager,
@@ -664,8 +719,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_mock_provider_inference() {
+    #[tokio::test]
+    async fn test_mock_provider_inference() {
         // 创建记忆层
         let mut memory = MemoryLayerManager::new("node_1");
         let credential = create_test_credential();
@@ -689,7 +744,7 @@ mod tests {
         ).with_memory_blocks(vec![0]);
 
         // 执行推理
-        let response = provider.execute_inference(&request, &memory, &credential).unwrap();
+        let response = provider.execute_inference(&request, &memory, &credential).await.unwrap();
 
         assert!(response.success);
         assert!(!response.completion.is_empty());
@@ -740,8 +795,8 @@ mod tests {
         assert!(response.efficiency > 0.0);
     }
 
-    #[test]
-    fn test_mock_provider_timeout() {
+    #[tokio::test]
+    async fn test_mock_provider_timeout() {
         let mut memory = MemoryLayerManager::new("node_1");
         let credential = create_test_credential();
         memory.write_kv("context".to_string(), b"test context".to_vec(), &credential).unwrap();
@@ -762,13 +817,13 @@ mod tests {
             100,
         ).with_memory_blocks(vec![0]);
 
-        let result = provider.execute_inference(&request, &memory, &credential);
+        let result = provider.execute_inference(&request, &memory, &credential).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("timeout"));
     }
 
-    #[test]
-    fn test_mock_provider_output_truncation() {
+    #[tokio::test]
+    async fn test_mock_provider_output_truncation() {
         let mut memory = MemoryLayerManager::new("node_1");
         let credential = create_test_credential();
         memory.write_kv("context".to_string(), b"test context".to_vec(), &credential).unwrap();
@@ -788,15 +843,15 @@ mod tests {
             100,
         ).with_memory_blocks(vec![0]);
 
-        let response = provider.execute_inference(&request, &memory, &credential).unwrap();
+        let response = provider.execute_inference(&request, &memory, &credential).await.unwrap();
         assert!(response.success);
         assert!(response.completion_tokens <= 5);
         assert!(response.error_message.is_some());
         assert!(response.error_message.unwrap().contains("truncated"));
     }
 
-    #[test]
-    fn test_mock_provider_random_failures() {
+    #[tokio::test]
+    async fn test_mock_provider_random_failures() {
         let mut memory = MemoryLayerManager::new("node_1");
         let credential = create_test_credential();
         memory.write_kv("context".to_string(), b"test context".to_vec(), &credential).unwrap();
@@ -820,7 +875,7 @@ mod tests {
         let mut success_count = 0;
         let mut failure_count = 0;
         for _ in 0..20 {
-            match provider.execute_inference(&request, &memory, &credential) {
+            match provider.execute_inference(&request, &memory, &credential).await {
                 Ok(_) => success_count += 1,
                 Err(_) => failure_count += 1,
             }
@@ -831,8 +886,8 @@ mod tests {
         assert!(success_count + failure_count == 20);
     }
 
-    #[test]
-    fn test_mock_provider_max_failures() {
+    #[tokio::test]
+    async fn test_mock_provider_max_failures() {
         let mut memory = MemoryLayerManager::new("node_1");
         let credential = create_test_credential();
         memory.write_kv("context".to_string(), b"test context".to_vec(), &credential).unwrap();
@@ -854,12 +909,12 @@ mod tests {
 
         // 前 3 次应该失败
         for i in 0..3 {
-            let result = provider.execute_inference(&request, &memory, &credential);
+            let result = provider.execute_inference(&request, &memory, &credential).await;
             assert!(result.is_err(), "Iteration {} should fail", i);
         }
 
         // 第 4 次应该成功
-        let result = provider.execute_inference(&request, &memory, &credential);
+        let result = provider.execute_inference(&request, &memory, &credential).await;
         assert!(result.is_ok(), "Iteration 3 should succeed");
     }
 }

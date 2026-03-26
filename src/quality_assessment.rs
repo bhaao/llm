@@ -21,10 +21,11 @@
 //! - `SemanticCheckMode::SmallModel`: 接入小型语义模型（更准确）
 //! - `SemanticCheckMode::Disabled`: 关闭语义检查（仅 KV 校验）
 
+use serde::{Serialize, Deserialize};
 use crate::block::KvCacheProof;
 
 /// 语义检查模式 - 可插拔配置
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum SemanticCheckMode {
     /// 基于规则的轻量检查（默认）
     /// - 检查空输出
@@ -60,7 +61,7 @@ impl SemanticCheckMode {
 }
 
 /// 质量评估结果
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QualityAssessment {
     /// 综合质量得分（0.0 - 1.0）
     pub overall_score: f64,
@@ -77,7 +78,7 @@ pub struct QualityAssessment {
 }
 
 /// 评估详情
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AssessmentDetails {
     /// KV Cache 哈希匹配详情
     pub kv_hash_match: Option<bool>,
@@ -88,7 +89,7 @@ pub struct AssessmentDetails {
 }
 
 /// 语义检查结果
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SemanticCheckResult {
     /// 是否与上下文一致
     pub context_consistent: bool,
@@ -99,7 +100,7 @@ pub struct SemanticCheckResult {
 }
 
 /// 完整性检查结果
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrityCheckResult {
     /// 输出是否完整
     pub is_complete: bool,
@@ -107,6 +108,322 @@ pub struct IntegrityCheckResult {
     pub has_abrupt_ending: bool,
     /// token 数量是否符合预期
     pub token_count_valid: bool,
+}
+
+// ==================== 质量验证证明结构（P11 要求 2） ====================
+
+/// 质量验证证明 - 完整的验证证据链
+///
+/// **设计目标**：
+/// - 可独立验证：Proof 包含所有必要信息
+/// - 不可篡改：包含验证器签名
+/// - 可追溯：唯一 proof_id 和输出哈希
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityProof {
+    /// 评估 ID（唯一标识）
+    pub proof_id: String,
+    /// 被验证的输出哈希
+    pub output_hash: String,
+    /// 验证时间戳
+    pub timestamp: u64,
+    /// 验证器 ID
+    pub validator_id: String,
+    /// 质量分数 (0.0-1.0)
+    pub quality_score: f64,
+    /// 详细验证证据
+    pub evidence: VerificationEvidence,
+    /// 验证器签名
+    pub validator_signature: String,
+}
+
+impl QualityProof {
+    /// 创建新的质量证明
+    pub fn new(
+        output_hash: String,
+        validator_id: String,
+        quality_score: f64,
+        evidence: VerificationEvidence,
+    ) -> Self {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        use sha2::{Sha256, Digest};
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // 生成唯一 proof_id
+        let data = format!("{}:{}:{}:{}", output_hash, validator_id, timestamp, quality_score);
+        let proof_id = format!("proof_{:x}", Sha256::digest(data.as_bytes()));
+
+        QualityProof {
+            proof_id,
+            output_hash,
+            timestamp,
+            validator_id,
+            quality_score,
+            evidence,
+            validator_signature: String::new(), // 需要后续签名
+        }
+    }
+
+    /// 生成签名消息
+    pub fn signing_message(&self) -> String {
+        format!(
+            "{}:{}:{}:{}:{}",
+            self.proof_id,
+            self.output_hash,
+            self.timestamp,
+            self.validator_id,
+            self.quality_score
+        )
+    }
+
+    /// 对证明进行签名
+    pub fn sign(&mut self, private_key: &[u8; 32]) -> Result<(), String> {
+        use ed25519_dalek::{SigningKey, Signer};
+
+        let signing_key = SigningKey::from_bytes(private_key);
+        let message = self.signing_message();
+        let signature = signing_key.sign(message.as_bytes());
+        self.validator_signature = hex::encode(signature.to_bytes());
+        Ok(())
+    }
+
+    /// 验证签名
+    pub fn verify_signature(&self, public_key: &[u8; 32]) -> bool {
+        use ed25519_dalek::{VerifyingKey, Verifier};
+        use ed25519_dalek::Signature;
+
+        let verifying_key = VerifyingKey::from_bytes(public_key).unwrap_or_else(|_| {
+            // Fallback: create a zero key (will fail verification)
+            VerifyingKey::from_bytes(&[0u8; 32]).unwrap()
+        });
+
+        let signature_bytes = match hex::decode(&self.validator_signature) {
+            Ok(bytes) => bytes,
+            Err(_) => return false,
+        };
+
+        let signature = match Signature::try_from(&signature_bytes[..]) {
+            Ok(sig) => sig,
+            Err(_) => return false,
+        };
+
+        verifying_key
+            .verify(self.signing_message().as_bytes(), &signature)
+            .is_ok()
+    }
+
+    /// 是否通过质量阈值
+    pub fn passes_threshold(&self, threshold: f64) -> bool {
+        self.quality_score >= threshold
+    }
+}
+
+/// 验证证据 - 包含所有验证子证据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationEvidence {
+    /// KV Cache 校验证据
+    pub kv_proof: Option<KvVerification>,
+    /// 语义一致性证据
+    pub semantic_proof: Option<SemanticVerification>,
+    /// 完整性证据
+    pub integrity_proof: Option<IntegrityVerification>,
+    /// 多节点比对证据
+    pub multi_node_proof: Option<MultiNodeVerification>,
+}
+
+impl VerificationEvidence {
+    /// 创建空证据
+    pub fn empty() -> Self {
+        VerificationEvidence {
+            kv_proof: None,
+            semantic_proof: None,
+            integrity_proof: None,
+            multi_node_proof: None,
+        }
+    }
+
+    /// 仅 KV 校验证据
+    pub fn kv_only(expected_hash: String, computed_hash: String, match_result: bool) -> Self {
+        VerificationEvidence {
+            kv_proof: Some(KvVerification::new(expected_hash, computed_hash, match_result)),
+            semantic_proof: None,
+            integrity_proof: None,
+            multi_node_proof: None,
+        }
+    }
+
+    /// 从 QualityAssessment 创建证据
+    pub fn from_assessment(assessment: &QualityAssessment) -> Self {
+        let mut evidence = VerificationEvidence::empty();
+
+        // KV 校验证据
+        if let Some(kv_match) = assessment.details.kv_hash_match {
+            evidence.kv_proof = Some(KvVerification {
+                expected_hash: String::new(), // 需要从上下文中获取
+                computed_hash: String::new(),
+                match_result: kv_match,
+            });
+        }
+
+        // 语义证据
+        if let Some(ref semantic) = assessment.details.semantic_check {
+            evidence.semantic_proof = Some(SemanticVerification::from_result(semantic));
+        }
+
+        // 完整性证据
+        if let Some(ref integrity) = assessment.details.integrity_check {
+            evidence.integrity_proof = Some(IntegrityVerification::from_result(integrity));
+        }
+
+        evidence
+    }
+}
+
+/// KV 验证证据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KvVerification {
+    /// 预期哈希
+    pub expected_hash: String,
+    /// 计算哈希
+    pub computed_hash: String,
+    /// 匹配结果
+    pub match_result: bool,
+}
+
+impl KvVerification {
+    pub fn new(expected_hash: String, computed_hash: String, match_result: bool) -> Self {
+        KvVerification {
+            expected_hash,
+            computed_hash,
+            match_result,
+        }
+    }
+}
+
+/// 语义验证证据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SemanticVerification {
+    /// 一致性得分
+    pub consistency_score: f64,
+    /// 是否检测到有害内容
+    pub harmful_content_detected: bool,
+    /// 连贯性分析
+    pub coherence_analysis: Vec<CoherenceMetric>,
+}
+
+impl SemanticVerification {
+    pub fn from_result(result: &SemanticCheckResult) -> Self {
+        SemanticVerification {
+            consistency_score: result.coherence_score,
+            harmful_content_detected: result.has_harmful_content,
+            coherence_analysis: vec![CoherenceMetric {
+                metric_name: "context_consistency".to_string(),
+                value: if result.context_consistent { 1.0 } else { 0.0 },
+            }],
+        }
+    }
+}
+
+/// 连贯性指标
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoherenceMetric {
+    /// 指标名称
+    pub metric_name: String,
+    /// 指标值
+    pub value: f64,
+}
+
+/// 完整性验证证据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntegrityVerification {
+    /// 输出是否完整
+    pub is_complete: bool,
+    /// 是否有异常截断
+    pub has_abrupt_ending: bool,
+    /// token 数量验证
+    pub token_count_valid: bool,
+    /// 实际 token 数
+    pub actual_token_count: u64,
+    /// 预期 token 数（如果有）
+    pub expected_token_count: Option<u64>,
+}
+
+impl IntegrityVerification {
+    pub fn from_result(result: &IntegrityCheckResult) -> Self {
+        IntegrityVerification {
+            is_complete: result.is_complete,
+            has_abrupt_ending: result.has_abrupt_ending,
+            token_count_valid: result.token_count_valid,
+            actual_token_count: 0, // 需要从上下文中获取
+            expected_token_count: None,
+        }
+    }
+}
+
+/// 多节点比对证据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultiNodeVerification {
+    /// 参与比对的节点数
+    pub num_nodes: u64,
+    /// 输出相似度得分
+    pub similarity_score: f64,
+    /// 是否达成一致
+    pub consensus_reached: bool,
+    /// 各节点质量得分
+    pub node_scores: Vec<NodeScoreRecord>,
+}
+
+/// 节点得分记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeScoreRecord {
+    /// 节点 ID
+    pub node_id: String,
+    /// 质量得分
+    pub quality_score: f64,
+}
+
+// ==================== QaaS 服务请求/响应类型 ====================
+
+/// 质量评估请求 - QaaS 服务输入
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityAssessmentRequest {
+    /// 输出文本
+    pub output: String,
+    /// 上下文（可选）
+    pub context: Option<String>,
+    /// 预期 KV 哈希（可选）
+    pub expected_kv_hash: Option<String>,
+    /// 评估模式
+    pub assessment_modes: Vec<AssessmentMode>,
+}
+
+/// 评估模式
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AssessmentMode {
+    /// KV 校验
+    KvVerification,
+    /// 语义检查
+    SemanticCheck,
+    /// 完整性检查
+    IntegrityCheck,
+    /// 多节点比对
+    MultiNodeComparison,
+}
+
+/// 质量评估响应 - QaaS 服务输出
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityAssessmentResponse {
+    /// 证明 ID
+    pub proof_id: String,
+    /// 质量分数
+    pub quality_score: f64,
+    /// 质量证明
+    pub proof: QualityProof,
+    /// 延迟（毫秒）
+    pub latency_ms: u64,
 }
 
 impl QualityAssessment {
