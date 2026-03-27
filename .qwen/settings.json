@@ -18,7 +18,9 @@
       "Bash(else)",
       "Bash(fi)",
       "Bash(done)",
-      "Bash(eof)"
+      "Bash(eof)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   },
   "$version": 3
