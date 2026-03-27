@@ -1,9 +1,8 @@
 # 区块链驱动的分布式推理验证平台
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/user/block_chain_with_context/ci.yml)](https://github.com/user/block_chain_with_context/actions)
-[![Crates.io](https://img.shields.io/crates/v/block_chain_with_context.svg)](https://crates.io/crates/block_chain_with_context)
-[![Documentation](https://docs.rs/block_chain_with_context/badge.svg)](https://docs.rs/block_chain_with_context)
-[![License](https://img.shields.io/crates/l/block_chain_with_context.svg)](https://crates.io/crates/block_chain_with_context)
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
+[![Status](https://img.shields.io/badge/status-prototype-yellow.svg)]()
 
 一个**区块链驱动的分布式推理验证平台**，专为大模型推理场景设计，通过李群验证和区块链存证解决"如何验证分布式推理结果可信"的核心问题。
 
