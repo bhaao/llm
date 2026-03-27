@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["bloom",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Send.html\" title=\"trait core::marker::Send\">Send</a> for <a class=\"struct\" href=\"bloom/valuevec/struct.ValueVec.html\" title=\"struct bloom::valuevec::ValueVec\">ValueVec</a>",1,["bloom::valuevec::ValueVec"]],["impl&lt;R, S&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Send.html\" title=\"trait core::marker::Send\">Send</a> for <a class=\"struct\" href=\"bloom/bloom/struct.BloomFilter.html\" title=\"struct bloom::bloom::BloomFilter\">BloomFilter</a>&lt;R, S&gt;<div class=\"where\">where\n    R: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Send.html\" title=\"trait core::marker::Send\">Send</a>,\n    S: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Send.html\" title=\"trait core::marker::Send\">Send</a>,</div>",1,["bloom::bloom::BloomFilter"]],["impl&lt;R, S&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Send.html\" title=\"trait core::marker::Send\">Send</a> for <a class=\"struct\" href=\"bloom/counting/struct.CountingBloomFilter.html\" title=\"struct bloom::counting::CountingBloomFilter\">CountingBloomFilter</a>&lt;R, S&gt;<div class=\"where\">where\n    R: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Send.html\" title=\"trait core::marker::Send\">Send</a>,\n    S: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Send.html\" title=\"trait core::marker::Send\">Send</a>,</div>",1,["bloom::counting::CountingBloomFilter"]]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1635]}

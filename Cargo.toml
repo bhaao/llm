@@ -3,7 +3,17 @@ name = "block_chain_with_context"
 version = "0.4.0"
 edition = "2021"
 
+[workspace]
+members = [
+    ".",
+    "kv",
+]
+
 [dependencies]
+# KV Cache 模块（本地子 crate）
+kv-cache = { path = "./kv", features = ["compression", "tiered-storage"] }
+
+# 核心依赖
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
@@ -45,7 +55,16 @@ dotenv = "0.15"
 
 # HTTP 客户端（用于调用推理服务和 RPC）
 # 使用 rustls 避免 OpenSSL 依赖
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"], default-features = false }
+
+# Bytes（用于流处理）
+bytes = "1"
+
+# SSE 流解析（用于 LLM 流式响应）
+eventsource-stream = "0.2"
+
+# 重试逻辑
+tokio-retry = "0.3"
 
 # Web 框架（用于节点 RPC 服务）
 axum = { version = "0.8", optional = true }

@@ -15,6 +15,11 @@
 //! - **无记忆存储能力**：仅临时加载，推理结束后释放
 //! - **标准化接口**：适配多引擎（vLLM/SGLang/TGI/自研）
 
+// 阿里云 Qwen API 支持
+pub mod aliyun_http_client;
+pub mod aliyun_qwen_provider;
+
+// 其他提供商支持
 pub mod http_client;
 pub mod llm_provider;
 pub mod ollama_provider;

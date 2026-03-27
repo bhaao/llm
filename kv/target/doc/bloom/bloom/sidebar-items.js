@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["needed_bits","optimal_num_hashes"],"struct":["BloomFilter"]};

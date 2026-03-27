@@ -20,7 +20,7 @@ use tracing::{info, instrument};
 use serde::{Serialize, Deserialize};
 
 use crate::provider_layer::{InferenceRequest, InferenceResponse};
-use crate::memory_layer::KvShard;
+use crate::KvShard;
 
 /// 计算完整性检查结果
 #[derive(Debug, Clone, Serialize, Deserialize)]

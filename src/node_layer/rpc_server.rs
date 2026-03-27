@@ -28,7 +28,8 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 use crate::blockchain::Blockchain;
-use crate::memory_layer::{MemoryLayerManager, KvShard};
+use crate::memory_layer::MemoryLayerManager;
+use crate::KvShard;
 use crate::node_layer::NodeLayerManager;
 use crate::transaction::Transaction;
 use crate::traits::Hashable;
