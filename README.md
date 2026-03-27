@@ -13,7 +13,7 @@
 > **这是一个架构验证原型，不是生产就绪系统。**
 >
 > 本项目展示了分布式 KV 缓存 + 审计日志的架构设计，核心概念已验证，但部分模块仍处于原型阶段。
-> 生产环境使用请务必参阅 [`docs/limitations.md`](docs/limitations.md)。
+> 生产环境使用请务必参阅 [`docs/04-PRODUCTION_READINESS.md`](docs/04-PRODUCTION_READINESS.md)。
 
 ---
 
@@ -94,7 +94,7 @@
 | P2P 网络层 | ⚠️ 原型 | libp2p stub 实现，待完整集成 |
 | PBFT 共识 | ⚠️ 原型 | 共识框架完整 |
 
-详细评估请参阅 [`docs/limitations.md`](docs/limitations.md)。
+详细评估请参阅 [`docs/04-PRODUCTION_READINESS.md`](docs/04-PRODUCTION_READINESS.md)。
 
 ---
 
@@ -262,13 +262,41 @@ cargo +nightly bench
 
 ---
 
-## 📚 文档
+## 📚 文档导航
 
-- [**开发者指南**](docs/DEVELOPER_GUIDE.md) - 开发环境、代码规范、贡献流程
-- [**架构文档**](docs/ARCHITECTURE.md) - 系统架构、数据流、监控
-- [**P11 锐评与修复**](docs/P11_REVIEW.md) - 业内专家锐评及修复记录
-- [**修复总结**](docs/REMEDIATION_SUMMARY.md) - 修复进度总结
-- [**API 文档**](https://docs.rs/block_chain_with_context) - 完整 API 文档
+本项目文档分为三个层次，请根据需求选择阅读：
+
+### 核心文档（推荐）
+
+| 文档 | 说明 | 适合人群 |
+|------|------|----------|
+| [**快速开始**](docs/01-GETTING_STARTED.md) | 环境安装、构建运行、使用示例 | 新用户 |
+| [**架构设计**](docs/02-ARCHITECTURE.md) | 三层架构、双链设计、数据流 | 架构师、开发者 |
+| [**开发者指南**](docs/03-DEVELOPER_GUIDE.md) | 开发环境、代码规范、调试技巧 | 贡献者 |
+| [**生产就绪度**](docs/04-PRODUCTION_READINESS.md) | 模块成熟度评估、生产部署建议 | 技术决策者 |
+| [**路线图**](docs/10-ROADMAP.md) | 版本历史、未来规划 | 所有人 |
+
+### Wiki 文档
+
+适合团队协作维护和快速查阅：
+
+- [**Wiki 首页**](docs/wiki/README.md) - Wiki 导航入口
+- [**入门篇**](docs/wiki/01-intro/) - 项目介绍、环境安装、快速开始
+- [**架构篇**](docs/wiki/02-architecture/) - 架构详解、模块说明、李群验证
+- [**开发篇**](docs/wiki/03-development/) - 开发环境、编码规范、测试指南
+- [**运维篇**](docs/wiki/04-operations/) - 部署指南、监控告警、故障排查
+- [**参考篇**](docs/wiki/05-reference/) - API 速查、配置项、FAQ
+
+### 内部参考
+
+- [**内部文档**](docs/internal/) - 历史文档、实现细节、技术报告
+- [**项目总结**](docs/internal/项目总结.md) - 全面技术总结
+- [**李群实现**](LIE_GROUP_IMPLEMENTATION.md) - 李群验证实现总结
+
+### 外部资源
+
+- [**API 文档**](https://docs.rs/block_chain_with_context) - 完整 Rust API 文档
+- [**Crates.io**](https://crates.io/crates/block_chain_with_context) - Cargo 包页面
 
 ---
 
@@ -325,7 +353,7 @@ error: unused variable: `x`
 cargo clippy --all-features --all-targets -- -D warnings
 ```
 
-详细故障排查请参阅 [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md#故障排查)。
+详细故障排查请参阅 [`docs/03-DEVELOPER_GUIDE.md`](docs/03-DEVELOPER_GUIDE.md#故障排查)。
 
 ---
 
@@ -339,7 +367,7 @@ cargo clippy --all-features --all-targets -- -D warnings
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
 
-详细贡献流程请参阅 [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md#贡献流程)。
+详细贡献流程请参阅 [`docs/03-DEVELOPER_GUIDE.md`](docs/03-DEVELOPER_GUIDE.md#贡献流程)。
 
 ---
 
@@ -353,9 +381,9 @@ cargo clippy --all-features --all-targets -- -D warnings
 
 感谢业内专家的 P11 锐评，帮助我们改进了项目。
 
-详见 [`docs/P11_REVIEW.md`](docs/P11_REVIEW.md)。
+详见 [`docs/05-P11_REVIEW_FIXES.md`](docs/05-P11_REVIEW_FIXES.md)。
 
 ---
 
-*最后更新：2026-03-11*
+*最后更新：2026-03-27*
 *项目版本：v0.5.0*

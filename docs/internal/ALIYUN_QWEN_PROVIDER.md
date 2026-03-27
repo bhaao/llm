@@ -366,3 +366,8 @@ let request = InferenceRequest::new(
 ## 支持
 
 如有问题，请提交 Issue 或联系项目维护者。
+
+---
+
+*最后更新：2026-03-27*
+*项目版本：v0.5.0*

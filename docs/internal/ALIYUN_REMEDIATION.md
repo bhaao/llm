@@ -378,5 +378,6 @@ DASHSCOPE_API_KEY=sk-your_key cargo test --test aliyun_integration -- --nocaptur
 
 ---
 
-*修复日期：2026-03-26*  
+*修复日期：2026-03-26*
+*最后更新：2026-03-27*
 *修复版本：v0.5.1*

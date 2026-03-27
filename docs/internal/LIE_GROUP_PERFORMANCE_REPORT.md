@@ -226,6 +226,7 @@ cargo test --bench lie_group_bench test_tampering_distance_explosion -- --nocapt
 
 ---
 
-**报告生成时间**: 2026-03-05  
-**版本**: v0.5.0  
+**报告生成时间**: 2026-03-05
+*最后更新*: 2026-03-27
+**版本**: v0.5.0
 **状态**: ✅ 性能验证通过，可进入生产环境评估
