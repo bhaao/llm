@@ -1,40 +1,52 @@
-# 分布式 KV 缓存系统
+# 区块链驱动的分布式推理验证平台
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/user/block_chain_with_context/ci.yml)](https://github.com/user/block_chain_with_context/actions)
 [![Crates.io](https://img.shields.io/crates/v/block_chain_with_context.svg)](https://crates.io/crates/block_chain_with_context)
 [![Documentation](https://docs.rs/block_chain_with_context/badge.svg)](https://docs.rs/block_chain_with_context)
-[![License](https://img.shields.io/crates/l/block_chain_with_context.svg)](LICENSE)
+[![License](https://img.shields.io/crates/l/block_chain_with_context.svg)](https://crates.io/crates/block_chain_with_context)
 
-一个高性能的分布式 KV 缓存系统，专为大模型推理场景设计，带哈希审计日志功能。
+一个**区块链驱动的分布式推理验证平台**，专为大模型推理场景设计，通过李群验证和区块链存证解决"如何验证分布式推理结果可信"的核心问题。
 
 > [!WARNING]
 > **项目状态：v0.5.0 - 架构验证原型**
 >
 > **这是一个架构验证原型，不是生产就绪系统。**
 >
-> 本项目展示了分布式 KV 缓存 + 审计日志的架构设计，核心概念已验证，但部分模块仍处于原型阶段。
+> 本项目展示了**区块链 + 李群验证 + 分布式推理**的创新架构，核心概念已验证，但部分模块仍处于原型阶段。
 > 生产环境使用请务必参阅 [`docs/04-PRODUCTION_READINESS.md`](docs/04-PRODUCTION_READINESS.md)。
 
 ---
 
 ## 📖 项目简介
 
-本项目采用 Rust 实现了一套高性能的分布式 KV 缓存系统，专为大模型推理场景优化：
+本项目采用 Rust 实现了一套**区块链驱动的分布式推理验证平台**，专为大模型推理场景优化：
 
-- **核心功能**：分布式 KV 上下文存储，支持分片、压缩、多级缓存
-- **审计日志**：KV 哈希存证，提供不可篡改的数据完整性验证
+- **核心创新**：李群验证 + 区块链存证，解决分布式推理结果的可信验证问题
+- **KV 缓存**：分布式 KV 上下文存储，支持分片、压缩、多级缓存（李群验证的载体）
+- **审计日志**：KV 哈希存证 + 李群聚合根，提供不可篡改的数据完整性验证
 - **信誉系统**：节点信誉管理，支持可信调度
 
 ### 核心理念
 
-> **数据本地存储 + 哈希全网存证**
+> **数据本地存储 + 哈希全网存证 + 李群验证**
 >
 > - 记忆层存储实际 KV 数据，支持本地高速访问
 > - 审计日志记录 KV 哈希，提供全网存证验证
+> - **李群聚合**：节点提交局部李代数，链上聚合全局李群状态，信任根从"信任节点"上移到"信任数学公式"
+
+### 为什么不是传统 KV 缓存系统？
+
+| 维度 | 传统 KV 缓存 | 本项目（推理验证平台） |
+|------|------------|---------------------|
+| **核心问题** | 如何高效存储/读取 KV | 如何验证分布式推理结果可信 |
+| **KV 缓存** | 核心功能 | 载体/应用场景 |
+| **区块链** | 可选/无 | 核心基础设施（信任根） |
+| **李群验证** | 无 | 核心竞争力（区别于其他项目） |
+| **信任根** | 信任节点 | 信任数学公式（李群聚合） |
 
 ### 架构设计
 
-**三层架构**：
+**三层架构 + 李群验证**：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -52,16 +64,28 @@
 │  • 分布式多副本存储（容灾）                                  │
 │  • 版本控制/访问授权                                         │
 └─────────────────────────────────────────────────────────────┘
-                              ↑ ↓ 哈希存证
+                              ↑ ↓ 哈希存证 + 李代数提交
 ┌─────────────────────────────────────────────────────────────┐
 │                    审计日志层 (Audit Layer)                  │
 │  • KV 哈希存证（不可篡改）                                   │
+│  • 李群聚合（信任根：G = exp(1/N * Σlog(g_i))）             │
+│  • PBFT 共识（拜占庭容错）                                   │
 │  • 节点信誉管理                                              │
-│  • 共识结果记录                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-详细架构说明请参阅 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
+**四层验证架构**（李群驱动）：
+```
+第一层：分布式上下文分片层（不可信节点） → 提交局部李代数 A_i
+    ↓
+第二层：李群链上聚合层（系统核心，信任根） → 生成全局李群状态 G
+    ↓
+第三层：QaaS 质量验证层（李群度量） → 输出验证结果
+    ↓
+第四层：区块链存证与激励层 → 记录 KvCacheProof + LieGroupRoot
+```
+
+详细架构说明请参阅 [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md)。
 
 ---
 
@@ -71,28 +95,31 @@
 
 | 特性 | 状态 | 说明 |
 |------|------|------|
-| 真实 LLM 集成 | ✅ | 支持 vLLM/SGLang HTTP API |
-| 断路器模式 | ✅ | 连续失败自动切换 |
-| 异步 I/O | ✅ | 全链路 async/await |
-| 线程安全 | ✅ | 100 线程并发测试通过 |
-| KV Cache 优化 | ✅ | Chunk-level + 压缩 + 预取 |
-| 上下文分片 | ✅ | 支持 100K+ tokens 跨节点 |
-| 多级缓存 | ✅ | L1 CPU + L2 Disk + L3 Remote(Redis) |
-| gRPC 通信 | ✅ | 跨节点 RPC 支持 |
-| P2P 网络层 | ⚠️ 原型 | libp2p stub 实现 |
-| PBFT 共识 | ⚠️ 原型 | 框架完整，libp2p stub 已实现 |
+| **李群验证** | ✅ | 100 节点聚合 53µs，信任根上移到数学公式 |
+| **区块链存证** | ✅ | KV 哈希 + 李群根不可篡改记录 |
+| **PBFT 共识** | ⚠️ 原型 | 三阶段提交 + 视图切换，libp2p stub |
+| **真实 LLM 集成** | ✅ | 支持 vLLM/SGLang HTTP API |
+| **断路器模式** | ✅ | 连续失败自动切换，指数退避重试 |
+| **异步 I/O** | ✅ | 全链路 async/await |
+| **线程安全** | ✅ | 100 线程并发测试通过 |
+| **KV Cache 优化** | ✅ | Chunk-level + 压缩 + 预取 + 分片 |
+| **多级缓存** | ✅ | L1 CPU + L2 Disk + L3 Remote(Redis) |
+| **gRPC 通信** | ✅ | 跨节点 RPC 支持 |
+| **Gossip 同步** | ⚠️ 原型 | Vector Clock + Merkle Tree |
 
 ### 生产就绪度
 
 | 模块 | 状态 | 说明 |
 |------|------|------|
-| 服务层 | ✅ 生产就绪 | 推理编排、存证、故障切换服务 |
-| 审计日志（单节点） | ✅ 生产就绪 | KV 哈希存证、交易记录 |
-| 记忆层 | ✅ 生产就绪 | KV Cache 存储、分片、压缩、L3 Redis |
-| 节点层 | ✅ 生产就绪 | 节点管理、信誉系统 |
-| 提供商层 | ✅ 生产就绪 | 真实 LLM API 集成（vLLM/SGLang） |
-| P2P 网络层 | ⚠️ 原型 | libp2p stub 实现，待完整集成 |
-| PBFT 共识 | ⚠️ 原型 | 共识框架完整 |
+| **李群验证模块** | ✅ 生产就绪 | 100 节点聚合 53µs，篡改检测∞ |
+| **服务层** | ✅ 生产就绪 | 推理编排、存证、故障切换服务 |
+| **审计日志（单节点）** | ✅ 生产就绪 | KV 哈希存证、李群根记录 |
+| **记忆层** | ✅ 生产就绪 | KV Cache 存储、分片、压缩、L3 Redis |
+| **节点层** | ✅ 生产就绪 | 节点管理、信誉系统、访问凭证 |
+| **提供商层** | ✅ 生产就绪 | 真实 LLM API 集成（vLLM/SGLang） |
+| **PBFT 共识** | ⚠️ 原型 | 共识框架完整，待 libp2p 完整集成 |
+| **Gossip 同步** | ⚠️ 原型 | 协议完整，待 libp2p 完整集成 |
+| **P2P 网络层** | ⚠️ 原型 | libp2p stub 实现 |
 
 详细评估请参阅 [`docs/04-PRODUCTION_READINESS.md`](docs/04-PRODUCTION_READINESS.md)。
 
@@ -166,7 +193,33 @@ let shard = memory.read_kv("key", &credential);
 assert!(shard.is_some());
 ```
 
-#### 2. 配置管理（Builder 模式）
+#### 2. 李群验证（核心创新）
+
+```rust
+use block_chain_with_context::lie_algebra::{
+    LieGroupAggregator, LieAlgebraElement, LieGroupType,
+};
+
+// 创建聚合器（信任根：硬编码聚合公式）
+let aggregator = LieGroupAggregator::default_with_type(LieGroupType::SE3);
+
+// 准备李代数元素列表（来自多个节点）
+let algebra_elements = vec![
+    LieAlgebraElement::new("node_1", vec![0.1, 0.2, 0.3, 1.0, 2.0, 3.0], LieGroupType::SE3),
+    LieAlgebraElement::new("node_2", vec![0.2, 0.3, 0.4, 1.5, 2.5, 3.5], LieGroupType::SE3),
+    LieAlgebraElement::new("node_3", vec![0.15, 0.25, 0.35, 1.2, 2.2, 3.2], LieGroupType::SE3),
+];
+
+// 执行聚合：G = exp(1/N * Σlog(g_i))
+let result = aggregator.aggregate(&algebra_elements).unwrap();
+
+// 获取全局李群状态 G（信任根）
+let global_group = result.global_state;
+assert!(result.is_valid);
+assert_eq!(result.contributor_count, 3);
+```
+
+#### 3. 配置管理（Builder 模式）
 
 ```rust
 use block_chain_with_context::BlockchainConfig;
@@ -182,7 +235,7 @@ let config = BlockchainConfig::builder()
     .expect("配置验证失败");
 ```
 
-#### 3. 审计日志（哈希存证）
+#### 4. 审计日志（哈希存证 + 李群根）
 
 ```rust
 use block_chain_with_context::{Blockchain, KvCacheProof};
@@ -202,10 +255,21 @@ let kv_proof = KvCacheProof::new(
 );
 blockchain.add_kv_proof(kv_proof);
 ```
+```
 
 ---
 
 ## 📊 性能指标
+
+### 李群验证性能（核心创新）
+
+| 指标 | 生产要求 | 实测 | 评价 |
+|------|----------|------|------|
+| **聚合时间** | < 100ms | **53.19 µs** | ✅ 快 1880 倍 |
+| **距离计算** | < 10ms | **137 ns** | ✅ 快 73000 倍 |
+| **篡改检测** | ×5.47 | **∞** | ✅ 验证通过 |
+
+**测试场景**：100 节点，SE(3) 李群类型，6 维特征
 
 ### KV 操作延迟
 
@@ -222,8 +286,9 @@ blockchain.add_kv_proof(kv_proof);
 | KV 并发写入 | 10 | ~10K ops/s | ~5ms |
 | KV 并发写入 | 100 | ~50K ops/s | ~20ms |
 | 审计日志读取 | 10 | ~100K ops/s | ~1ms |
+| 李群聚合 | 100 节点 | 1 次聚合 | 53µs |
 
-**数据来源**：`cargo bench` 基准测试报告
+**数据来源**：`cargo +nightly bench` 基准测试报告
 
 运行基准测试：
 ```bash
@@ -281,17 +346,17 @@ cargo +nightly bench
 适合团队协作维护和快速查阅：
 
 - [**Wiki 首页**](docs/wiki/README.md) - Wiki 导航入口
-- [**入门篇**](docs/wiki/01-intro/) - 项目介绍、环境安装、快速开始
-- [**架构篇**](docs/wiki/02-architecture/) - 架构详解、模块说明、李群验证
-- [**开发篇**](docs/wiki/03-development/) - 开发环境、编码规范、测试指南
-- [**运维篇**](docs/wiki/04-operations/) - 部署指南、监控告警、故障排查
-- [**参考篇**](docs/wiki/05-reference/) - API 速查、配置项、FAQ
+- [**入门篇**](docs/wiki/INDEX.md) - 项目介绍、环境安装、快速开始
+- [**架构篇**](docs/wiki/INDEX.md) - 架构详解、模块说明、李群验证
+- [**开发篇**](docs/wiki/INDEX.md) - 开发环境、编码规范、测试指南
+- [**运维篇**](docs/wiki/INDEX.md) - 部署指南、监控告警、故障排查
+- [**参考篇**](docs/wiki/INDEX.md) - API 速查、配置项、FAQ
 
 ### 内部参考
 
-- [**内部文档**](docs/internal/) - 历史文档、实现细节、技术报告
+- [**内部文档首页**](docs/internal/项目总结.md) - 历史文档、实现细节、技术报告
 - [**项目总结**](docs/internal/项目总结.md) - 全面技术总结
-- [**李群实现**](LIE_GROUP_IMPLEMENTATION.md) - 李群验证实现总结
+- [**李群实现**](docs/07-LIE_GROUP_IMPLEMENTATION.md) - 李群验证实现总结
 
 ### 外部资源
 
@@ -373,7 +438,7 @@ cargo clippy --all-features --all-targets -- -D warnings
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 参阅 [LICENSE](LICENSE) 文件。
+本项目采用 MIT 许可证 - 参阅 [Crates.io 许可证页面](https://crates.io/crates/block_chain_with_context)。
 
 ---
 

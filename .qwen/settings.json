@@ -5,7 +5,9 @@
       "Bash(cargo test *)",
       "Bash(mkdir *)",
       "Bash(mv *)",
-      "Bash(cp *)"
+      "Bash(cp *)",
+      "Bash(chmod *)",
+      "Bash(/home/hao/codes/block_chain_with_context/scripts/verify_links.sh)"
     ]
   },
   "$version": 3

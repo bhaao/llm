@@ -401,7 +401,7 @@ echo "inference_latency_seconds $latency"
 
 - [部署指南](01-deployment.md) - 单节点、多节点部署
 - [故障排查](03-troubleshooting.md) - 常见问题、排查流程
-- [性能调优](04-performance.md) - 性能指标、优化建议
+- [性能调优](../../06-KV_CACHE_OPTIMIZATION.md) - 性能指标、优化建议
 
 ---
 

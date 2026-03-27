@@ -38,7 +38,7 @@
 | 距离计算 | < 10ms | **137 ns** | ✅ 超额完成 (快 73000 倍) |
 | 篡改检测 | ×5.47 | **∞** | ✅ 验证通过 |
 
-**文档**: [`docs/LIE_GROUP_PERFORMANCE_REPORT.md`](docs/LIE_GROUP_PERFORMANCE_REPORT.md)
+**文档**: [`LIE_GROUP_PERFORMANCE_REPORT.md`](LIE_GROUP_PERFORMANCE_REPORT.md)
 
 ---
 
@@ -62,7 +62,7 @@ cargo build --features "remote-storage"
 docker run -d -p 6379:6379 redis:latest
 ```
 
-**文档**: [`docs/L3_REDIS_CACHE_GUIDE.md`](docs/L3_REDIS_CACHE_GUIDE.md)
+**文档**: [`L3_REDIS_CACHE_GUIDE.md`](L3_REDIS_CACHE_GUIDE.md)
 
 ---
 
@@ -81,7 +81,7 @@ docker run -d -p 6379:6379 redis:latest
 - gRPC 网络：✅ 生产就绪
 - libp2p 网络：⚠️ 原型 (stub 实现)
 
-**文档**: [`docs/LIBP2P_INTEGRATION_GUIDE.md`](docs/LIBP2P_INTEGRATION_GUIDE.md)
+**文档**: [`LIBP2P_INTEGRATION_GUIDE.md`](LIBP2P_INTEGRATION_GUIDE.md)
 
 ---
 
@@ -221,13 +221,13 @@ tests/
 
 - [x] 运行基准测试：`cargo bench --bench lie_group_bench`
 - [x] 验证篡改距离：100 节点聚合 < 100ms
-- [x] 查看报告：`docs/LIE_GROUP_PERFORMANCE_REPORT.md`
+- [x] 查看报告：`../LIE_GROUP_PERFORMANCE_REPORT.md`
 
 ### L3 Redis 缓存
 
 - [x] 启动 Redis: `docker run -d -p 6379:6379 redis:latest`
 - [x] 运行测试：`cargo test --features remote-storage`
-- [x] 查看文档：`docs/L3_REDIS_CACHE_GUIDE.md`
+- [x] 查看文档：`../L3_REDIS_CACHE_GUIDE.md`
 
 ### 混沌测试
 

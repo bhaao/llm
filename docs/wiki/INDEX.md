@@ -66,7 +66,7 @@
 | [部署指南](04-operations/01-deployment.md) | 单节点、多节点部署 | 20 分钟 |
 | [监控告警](04-operations/02-monitoring.md) | Prometheus、Grafana | 15 分钟 |
 | [故障排查](04-operations/03-troubleshooting.md) | 常见问题、排查流程 | 20 分钟 |
-| [性能调优](../04-PRODUCTION_READINESS.md) | 性能指标、优化建议 | 25 分钟 |
+| [性能调优](../06-KV_CACHE_OPTIMIZATION.md) | 性能指标、优化建议 | 25 分钟 |
 
 ### 📚 参考篇 (05-reference)
 
@@ -99,8 +99,8 @@
 
 ### 内部资源
 
-- [核心文档](../README.md) - 编号核心文档 (01-10)
-- [内部参考](../internal/) - 历史文档和详细实现说明
+- [核心文档](../../docs/README.md) - 主 README
+- [内部参考](../../docs/internal/项目总结.md) - 历史文档和详细实现说明
 
 ### 外部资源
 

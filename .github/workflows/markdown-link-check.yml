@@ -1,0 +1,44 @@
+# Markdown 链接检查器
+# 验证所有 Markdown 文件中的内部链接是否有效
+
+name: Markdown Link Check
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - '**/*.md'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - '**/*.md'
+  workflow_dispatch:
+
+jobs:
+  markdown-link-check:
+    name: Check Markdown Links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bash
+        shell: bash
+
+      - name: Run link verification script
+        run: |
+          echo "🔍 Running Markdown link verification..."
+          bash scripts/verify_links.sh
+        env:
+          CI: true
+
+      - name: Link check summary
+        if: always()
+        run: |
+          echo "## Markdown Link Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ All markdown links are valid!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Some markdown links are broken. Please check the logs." >> $GITHUB_STEP_SUMMARY
+          fi

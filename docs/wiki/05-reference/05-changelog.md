@@ -125,8 +125,8 @@
 ## 相关链接
 
 - [GitHub Releases](https://github.com/user/block_chain_with_context/releases)
-- [路线图](../10-ROADMAP.md)
-- [生产就绪度评估](../04-PRODUCTION_READINESS.md)
+- [路线图](../../../docs/10-ROADMAP.md)
+- [生产就绪度评估](../../../docs/04-PRODUCTION_READINESS.md)
 
 ---
 

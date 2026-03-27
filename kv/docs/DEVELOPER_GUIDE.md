@@ -724,9 +724,9 @@ gh pr create \
 ## 相关文档
 
 - [P11 锐评与修复](P11_REVIEW.md) - P11 锐评全记录
-- [架构局限性](limitations.md) - 生产就绪度说明
-- [变更日志](CHANGELOG.md) - 版本更新历史
-- [开发建议](../建议.md) - 详细开发计划
+- [架构生产就绪度](../../docs/04-PRODUCTION_READINESS.md) - 生产就绪度说明
+- [变更日志](../../docs/08-CHANGELOG.md) - 版本更新历史
+- [开发建议](../../建议.md) - 详细开发计划
 
 ---
 

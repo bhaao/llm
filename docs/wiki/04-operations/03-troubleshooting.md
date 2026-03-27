@@ -489,7 +489,7 @@ sudo systemctl start blockchain
 
 - [部署指南](01-deployment.md) - 单节点、多节点部署
 - [监控告警](02-monitoring.md) - Prometheus、Grafana
-- [性能调优](04-performance.md) - 性能指标、优化建议
+- [性能调优](../../06-KV_CACHE_OPTIMIZATION.md) - 性能指标、优化建议
 
 ---
 

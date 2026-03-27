@@ -1,26 +1,39 @@
-# 分布式 KV 缓存系统 - Wiki
+# 区块链驱动的分布式推理验证平台 - Wiki
 
-> **项目版本**: v0.5.0  
-> **最后更新**: 2026-03-26  
+> **项目版本**: v0.5.0
+> **最后更新**: 2026-03-27
 > **项目状态**: 架构验证原型
 
 ---
 
 ## 📖 项目简介
 
-**分布式 KV 缓存系统**是一个高性能的分布式 KV 缓存系统，专为大模型推理场景设计，带哈希审计日志功能。
+**区块链驱动的分布式推理验证平台**，专为大模型推理场景设计，通过李群验证和区块链存证解决"如何验证分布式推理结果可信"的核心问题。
 
 ### 核心理念
 
-> **数据本地存储 + 哈希全网存证**
+> **数据本地存储 + 哈希全网存证 + 李群验证**
 >
 > - **记忆层**存储实际 KV 数据，支持本地高速访问
-> - **审计日志**记录 KV 哈希，提供全网存证验证
+> - **审计日志**记录 KV 哈希 + 李群聚合根，提供全网存证验证
+> - **李群聚合**：节点提交局部李代数，链上聚合全局李群状态，信任根从"信任节点"上移到"信任数学公式"
+
+### 为什么不是传统 KV 缓存系统？
+
+| 维度 | 传统 KV 缓存 | 本项目（推理验证平台） |
+|------|------------|---------------------|
+| **核心问题** | 如何高效存储/读取 KV | 如何验证分布式推理结果可信 |
+| **KV 缓存** | 核心功能 | 载体/应用场景 |
+| **区块链** | 可选/无 | 核心基础设施（信任根） |
+| **李群验证** | 无 | 核心竞争力（区别于其他项目） |
+| **信任根** | 信任节点 | 信任数学公式（李群聚合） |
 
 ### 核心功能
 
 | 功能 | 说明 |
 |------|------|
+| **李群验证** | 100 节点聚合 53µs，信任根上移到数学公式 |
+| **区块链存证** | KV 哈希 + 李群根不可篡改记录 |
 | **分布式 KV 存储** | 分片、压缩、多级缓存（L1 CPU + L2 Disk + L3 Remote） |
 | **哈希审计日志** | KV 数据哈希存证，提供不可篡改的数据完整性验证 |
 | **节点信誉系统** | 节点信誉管理，支持可信调度 |
@@ -58,10 +71,10 @@
 
 | 文档 | 说明 | 阅读时间 |
 |------|------|----------|
-| [什么是本项目](wiki/01-intro/01-what-is.md) | 项目定位、核心概念 | 5 分钟 |
-| [环境安装](wiki/01-intro/02-installation.md) | Rust、protoc 安装 | 10 分钟 |
-| [快速开始](wiki/01-intro/03-quickstart.md) | 构建、测试、运行示例 | 15 分钟 |
-| [配置指南](wiki/01-intro/04-configuration.md) | 配置文件、环境变量 | 10 分钟 |
+| [什么是本项目](01-intro/01-what-is.md) | 项目定位、核心概念 | 5 分钟 |
+| [环境安装](01-intro/02-installation.md) | Rust、protoc 安装 | 10 分钟 |
+| [快速开始](01-intro/03-quickstart.md) | 构建、测试、运行示例 | 15 分钟 |
+| [配置指南](01-intro/04-configuration.md) | 配置文件、环境变量 | 10 分钟 |
 
 ### 架构篇
 
@@ -69,10 +82,10 @@
 
 | 文档 | 说明 | 阅读时间 |
 |------|------|----------|
-| [整体架构](wiki/02-architecture/01-overview.md) | 三层架构、双链设计 | 20 分钟 |
-| [模块详解](wiki/02-architecture/02-modules.md) | 5 个核心模块详解 | 30 分钟 |
-| [数据流](wiki/02-architecture/03-dataflow.md) | 推理流程、共识流程 | 15 分钟 |
-| [李群验证](wiki/02-architecture/04-lie-group.md) | 信任根上移、四层架构 | 25 分钟 |
+| [整体架构](02-architecture/01-overview.md) | 三层架构、双链设计 | 20 分钟 |
+| [模块详解](02-architecture/02-modules.md) | 5 个核心模块详解 | 30 分钟 |
+| [数据流](02-architecture/03-dataflow.md) | 推理流程、共识流程 | 15 分钟 |
+| [李群验证](02-architecture/04-lie-group.md) | 信任根上移、四层架构 | 25 分钟 |
 
 ### 开发篇
 
@@ -80,11 +93,11 @@
 
 | 文档 | 说明 | 阅读时间 |
 |------|------|----------|
-| [开发环境](wiki/03-development/01-setup.md) | IDE、工具链配置 | 10 分钟 |
-| [编码规范](wiki/03-development/02-coding-style.md) | Rust 代码规范 | 15 分钟 |
-| [调试技巧](wiki/03-development/03-debugging.md) | 调试工具、常见问题 | 20 分钟 |
-| [测试指南](wiki/03-development/04-testing.md) | 单元测试、并发测试 | 15 分钟 |
-| [贡献流程](wiki/03-development/05-contributing.md) | Git 工作流、PR 流程 | 10 分钟 |
+| [开发环境](03-development/01-setup.md) | IDE、工具链配置 | 10 分钟 |
+| [编码规范](03-development/02-coding-style.md) | Rust 代码规范 | 15 分钟 |
+| [调试技巧](03-development/03-debugging.md) | 调试工具、常见问题 | 20 分钟 |
+| [测试指南](03-development/04-testing.md) | 单元测试、并发测试 | 15 分钟 |
+| [贡献流程](03-development/05-contributing.md) | Git 工作流、PR 流程 | 10 分钟 |
 
 ### 运维篇
 
@@ -92,10 +105,10 @@
 
 | 文档 | 说明 | 阅读时间 |
 |------|------|----------|
-| [部署指南](wiki/04-operations/01-deployment.md) | 单节点、多节点部署 | 20 分钟 |
-| [监控告警](wiki/04-operations/02-monitoring.md) | Prometheus、Grafana | 15 分钟 |
-| [故障排查](wiki/04-operations/03-troubleshooting.md) | 常见问题、排查流程 | 20 分钟 |
-| [性能调优](wiki/04-operations/04-performance.md) | 性能指标、优化建议 | 25 分钟 |
+| [部署指南](04-operations/01-deployment.md) | 单节点、多节点部署 | 20 分钟 |
+| [监控告警](04-operations/02-monitoring.md) | Prometheus、Grafana | 15 分钟 |
+| [故障排查](04-operations/03-troubleshooting.md) | 常见问题、排查流程 | 20 分钟 |
+| [性能调优](../../docs/06-KV_CACHE_OPTIMIZATION.md) | 性能指标、优化建议 | 25 分钟 |
 
 ### 参考篇
 
@@ -103,11 +116,11 @@
 
 | 文档 | 说明 |
 |------|------|
-| [API 参考](wiki/05-reference/01-api.md) | 核心 API 速查 |
-| [配置项参考](wiki/05-reference/02-config-options.md) | 所有配置项说明 |
-| [常见问题](wiki/05-reference/03-faq.md) | FAQ 问答 |
-| [术语表](wiki/05-reference/04-glossary.md) | 专业术语解释 |
-| [变更日志](wiki/05-reference/05-changelog.md) | 版本历史 |
+| [API 参考](05-reference/01-api.md) | 核心 API 速查 |
+| [配置项参考](05-reference/02-config-options.md) | 所有配置项说明 |
+| [常见问题](05-reference/03-faq.md) | FAQ 问答 |
+| [术语表](05-reference/04-glossary.md) | 专业术语解释 |
+| [变更日志](05-reference/05-changelog.md) | 版本历史 |
 
 ---
 
@@ -159,7 +172,7 @@
 - [GitHub 仓库](https://github.com/user/block_chain_with_context) - 源代码
 - [API 文档](https://docs.rs/block_chain_with_context) - Rust API 文档
 - [Crates.io](https://crates.io/crates/block_chain_with_context) - Cargo 包
-- [内部参考文档](../internal/) - 历史文档和详细实现说明
+- [内部参考文档](../../docs/internal/项目总结.md) - 历史文档和详细实现说明
 
 ---
 
@@ -173,7 +186,7 @@
 
 ### 贡献文档
 
-欢迎贡献文档！请参考 [贡献流程](wiki/03-development/05-contributing.md)。
+欢迎贡献文档！请参考 [贡献流程](03-development/05-contributing.md)。
 
 ---
 

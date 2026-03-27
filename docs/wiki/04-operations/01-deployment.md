@@ -453,7 +453,7 @@ du -sh /opt/blockchain/data/l2_cache
 
 - [监控告警](02-monitoring.md) - Prometheus、Grafana
 - [故障排查](03-troubleshooting.md) - 常见问题、排查流程
-- [性能调优](04-performance.md) - 性能指标、优化建议
+- [性能调优](../../06-KV_CACHE_OPTIMIZATION.md) - 性能指标、优化建议
 
 ---
 

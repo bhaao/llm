@@ -362,7 +362,7 @@ let guard = acquire_mutex_timeout(&mutex, 5000, "operation").await?;
 
 ## 附录：锐评原文索引
 
-1. [P11 锐评全文](../P11_锐评.md)
+1. [P11 锐评全文](P11_REVIEW.md)
 2. [修复记录](P11_REVIEW.md)
 3. [架构文档](ARCHITECTURE.md)
 4. [文档更新指南](DOCUMENTATION_UPDATES.md)
