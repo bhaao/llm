@@ -255,7 +255,6 @@ let kv_proof = KvCacheProof::new(
 );
 blockchain.add_kv_proof(kv_proof);
 ```
-```
 
 ---
 
