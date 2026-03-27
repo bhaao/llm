@@ -7,7 +7,18 @@
       "Bash(mv *)",
       "Bash(cp *)",
       "Bash(chmod *)",
-      "Bash(/home/hao/codes/block_chain_with_context/scripts/verify_links.sh)"
+      "Bash(/home/hao/codes/block_chain_with_context/scripts/verify_links.sh)",
+      "Bash(bash *)",
+      "Bash(cat)",
+      "Bash(do)",
+      "Bash(tr *)",
+      "Bash(cut *)",
+      "Bash(echo *)",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(eof)"
     ]
   },
   "$version": 3

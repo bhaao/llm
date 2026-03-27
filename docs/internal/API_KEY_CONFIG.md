@@ -148,8 +148,8 @@ cargo run -- --format json provider register-ollama-from-env --id my_provider
 ## 相关文档
 
 - [Ollama 实现文档](./OLLAMA_IMPLEMENTATION.md)
-- [README.md](../README.md)
-- [CLI 使用指南](../README.md#cli-使用示例)
+- [README.md](../../README.md)
+- [CLI 使用指南](../../README.md#快速开始)
 
 ---
 

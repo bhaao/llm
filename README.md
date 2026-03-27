@@ -418,7 +418,7 @@ error: unused variable: `x`
 cargo clippy --all-features --all-targets -- -D warnings
 ```
 
-详细故障排查请参阅 [`docs/03-DEVELOPER_GUIDE.md`](docs/03-DEVELOPER_GUIDE.md#故障排查)。
+详细故障排查请参阅 [`docs/03-DEVELOPER_GUIDE.md`](docs/03-DEVELOPER_GUIDE.md#6-故障排查)。
 
 ---
 
@@ -432,7 +432,7 @@ cargo clippy --all-features --all-targets -- -D warnings
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
 
-详细贡献流程请参阅 [`docs/03-DEVELOPER_GUIDE.md`](docs/03-DEVELOPER_GUIDE.md#贡献流程)。
+详细贡献流程请参阅 [`docs/03-DEVELOPER_GUIDE.md`](docs/03-DEVELOPER_GUIDE.md#5-贡献流程)。
 
 ---
 

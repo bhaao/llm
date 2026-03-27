@@ -179,9 +179,9 @@ bash scripts/verify_links.sh || exit 1
 ## 📚 相关文档
 
 - [README.md](../README.md) - 项目主 README
-- [docs/02-ARCHITECTURE.md](02-ARCHITECTURE.md) - 架构设计文档
-- [docs/07-LIE_GROUP_IMPLEMENTATION.md](07-LIE_GROUP_IMPLEMENTATION.md) - 李群实现文档
-- [docs/internal/项目总结.md](internal/项目总结.md) - 项目技术总结
+- [docs/02-ARCHITECTURE.md](./02-ARCHITECTURE.md) - 架构设计文档
+- [docs/07-LIE_GROUP_IMPLEMENTATION.md](./07-LIE_GROUP_IMPLEMENTATION.md) - 李群实现文档
+- [docs/internal/项目总结.md](./internal/项目总结.md) - 项目技术总结
 
 ---
 

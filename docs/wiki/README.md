@@ -108,7 +108,7 @@
 | [部署指南](04-operations/01-deployment.md) | 单节点、多节点部署 | 20 分钟 |
 | [监控告警](04-operations/02-monitoring.md) | Prometheus、Grafana | 15 分钟 |
 | [故障排查](04-operations/03-troubleshooting.md) | 常见问题、排查流程 | 20 分钟 |
-| [性能调优](../../docs/06-KV_CACHE_OPTIMIZATION.md) | 性能指标、优化建议 | 25 分钟 |
+| [性能调优](../06-KV_CACHE_OPTIMIZATION.md) | 性能指标、优化建议 | 25 分钟 |
 
 ### 参考篇
 
@@ -172,7 +172,7 @@
 - [GitHub 仓库](https://github.com/user/block_chain_with_context) - 源代码
 - [API 文档](https://docs.rs/block_chain_with_context) - Rust API 文档
 - [Crates.io](https://crates.io/crates/block_chain_with_context) - Cargo 包
-- [内部参考文档](../../docs/internal/项目总结.md) - 历史文档和详细实现说明
+- [内部参考文档](../internal/项目总结.md) - 历史文档和详细实现说明
 
 ---
 
